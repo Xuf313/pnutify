@@ -2,120 +2,449 @@
 
 import { useState, useEffect } from "react"
 import { format, isSameDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, getDay } from "date-fns"
-import { CalendarDays, Check, MapPin, MessageSquare, Star, Globe, Monitor, GraduationCap, Sparkles } from "lucide-react"
+import { CalendarDays, Check, MapPin, MessageSquare, Scroll, Star, Globe, Monitor, GraduationCap, Sparkles, ExternalLink, X, ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
 
+const safeDate = (d: any) => {
+  if (!d) return new Date();
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const formatNoticeDate = (dateStr: string) => {
+  try {
+    const cleanDate = dateStr.replace(/\./g, '-');
+    const d = new Date(cleanDate);
+    if(isNaN(d.getTime())) return dateStr;
+    return format(d, "MMM dd");
+  } catch(e) { return dateStr; }
+}
+
 export default function App() {
+  const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"notices" | "calendar" | "tasks">("notices")
   const [noticeCategory, setNoticeCategory] = useState<"international" | "cse" | "classes">("international")
-  
   const [notices, setNotices] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [classes, setClasses] = useState<any[]>([])
-  const [isLoadingNotices, setIsLoadingNotices] = useState(true)
-
+  const [isLoadingNotices, setIsLoadingNotices] = useState(false)
   const [platoCreds, setPlatoCreds] = useState({ username: '', password: '' })
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isSyncingPlato, setIsSyncingPlato] = useState(false)
+  const [selectedNotice, setSelectedNotice] = useState<any>(null)
 
   useEffect(() => {
-    async function fetchNotices() {
-      try {
-        const res = await fetch('/api/notices');
-        const data = await res.json();
-        if (data.notices) {
-          const formatted = data.notices.map((n: any) => ({
-            ...n,
-            icon: n.source === 'cse' ? <Monitor size={16} className="text-[#E07A5F]" /> : <Globe size={16} className="text-[#F2CC8F]" />
-          }));
-          setNotices(formatted);
+    setIsMounted(true);
+    
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+          Notification.requestPermission().catch(() => {});
         }
-      } catch (e) { console.error(e) } 
-      finally { setIsLoadingNotices(false) }
+      }
+    } catch (e) { console.log("Notifications blocked"); }
+
+    try {
+      let initialCreds = { username: '', password: '' };
+      let initialLogin = false;
+
+      const savedCreds = localStorage.getItem('plato_creds_v2');
+      if (savedCreds) {
+        initialCreds = JSON.parse(savedCreds);
+        setPlatoCreds(initialCreds);
+      }
+
+      const savedLogin = localStorage.getItem('is_logged_in_v2');
+      if (savedLogin) {
+        initialLogin = JSON.parse(savedLogin);
+        setIsLoggedIn(initialLogin);
+      }
+
+      const savedTasks = localStorage.getItem('tasks_v2');
+      if (savedTasks) {
+        const parsed = JSON.parse(savedTasks);
+        setTasks(Array.isArray(parsed) ? parsed : []);
+      }
+
+      const savedClasses = localStorage.getItem('classes_v2');
+      if (savedClasses) {
+        const parsed = JSON.parse(savedClasses);
+        setClasses(Array.isArray(parsed) ? parsed : []);
+      }
+
+      const savedNotices = localStorage.getItem('notices_v2');
+      if (savedNotices) {
+        const parsed = JSON.parse(savedNotices);
+        const validNotices = Array.isArray(parsed) ? parsed : [];
+        setNotices(validNotices);
+        fetchPublicNotices(validNotices);
+      } else {
+        fetchPublicNotices([]);
+      }
+
+      if (initialLogin && initialCreds.username && initialCreds.password) {
+        syncPlato(true, initialCreds);
+      }
+
+    } catch (error) {
+      localStorage.clear();
+      setNotices([]); setTasks([]); setClasses([]);
+      fetchPublicNotices([]);
     }
-    fetchNotices();
   }, []);
 
-  const syncPlato = async () => {
-    if (!platoCreds.username || !platoCreds.password) return alert("Enter PLATO credentials");
-    setIsSyncingPlato(true);
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem('plato_creds_v2', JSON.stringify(platoCreds));
+      localStorage.setItem('is_logged_in_v2', JSON.stringify(isLoggedIn));
+      localStorage.setItem('tasks_v2', JSON.stringify(tasks));
+      localStorage.setItem('classes_v2', JSON.stringify(classes));
+      localStorage.setItem('notices_v2', JSON.stringify(notices));
+    }
+  }, [platoCreds, isLoggedIn, tasks, classes, notices, isMounted]);
+
+  async function fetchPublicNotices(existingNotices: any[]) {
+    setIsLoadingNotices(true);
+    try {
+      const res = await fetch('/api/notices');
+      const data = await res.json();
+      if (data.notices && Array.isArray(data.notices)) {
+        const formatted = data.notices.map((n: any) => ({ ...n, iconType: n.source === 'cse' ? 'cse' : 'international' }));
+        const platoNotices = existingNotices.filter((n: any) => n.source === 'classes');
+
+        if (existingNotices.length > 0) {
+          const publicExisting = existingNotices.filter((n: any) => n.source !== 'classes');
+          const existingTitles = new Set(publicExisting.map((n: any) => n.title));
+          const brandNewNotices = formatted.filter((n: any) => !existingTitles.has(n.title));
+
+          if (brandNewNotices.length > 0 && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification("New PNU Notice!", { body: brandNewNotices[0].title, icon: "/favicon.ico" });
+          }
+
+          const mergedPublic = formatted.map((fresh: any) => {
+            const found = publicExisting.find((ex: any) => ex.title === fresh.title);
+            return found ? { ...fresh, status: found.status } : fresh;
+          });
+          setNotices([...mergedPublic, ...platoNotices]);
+        } else { 
+          setNotices([...formatted, ...platoNotices]); 
+        }
+      }
+    } catch (e) { console.error(e) } finally { setIsLoadingNotices(false) }
+  }
+
+  const syncPlato = async (silent = false, credsToUse = platoCreds) => {
+    if (!silent) {
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+      } catch(e) {}
+    }
+    
+    if (!credsToUse.username || !credsToUse.password) {
+      if (!silent) alert("Enter PLATO credentials");
+      return;
+    }
+    
+    if (!silent) setIsSyncingPlato(true);
+    
     try {
       const res = await fetch('/api/plato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(platoCreds)
+        body: JSON.stringify(credsToUse)
       });
       const data = await res.json();
       
-      if (data.announcements) {
-        const formattedAnns = data.announcements.map((n: any) => ({
-          ...n, icon: <GraduationCap size={16} className="text-[#81B29A]" />
-        }));
-        setNotices(prev => [...prev, ...formattedAnns]);
+      if (!res.ok || data.error) { 
+        if (!silent) alert(data.error || "Failed to sync PLATO."); 
+        if (!silent) setIsSyncingPlato(false); 
+        return; 
       }
-      if (data.tasks) setTasks(data.tasks);
-      if (data.classes) setClasses(data.classes);
       
-      alert("PLATO Synced Successfully!");
-    } catch (e) { alert("Failed to sync PLATO"); } 
-    finally { setIsSyncingPlato(false); }
+      if (data.announcements && Array.isArray(data.announcements)) {
+        const formattedAnns = data.announcements.map((n: any) => ({ ...n, iconType: 'plato' }));
+        
+        setNotices(prev => {
+          const prevSafe = prev || [];
+          const publicNotices = prevSafe.filter(n => n.source !== 'classes');
+          const oldPlato = prevSafe.filter(n => n.source === 'classes');
+          
+          const mergedPlato = formattedAnns.map((fresh: any) => {
+            const found = oldPlato.find((ex: any) => ex.title === fresh.title);
+            return found ? { ...fresh, status: found.status } : fresh;
+          });
+          
+          return [...publicNotices, ...mergedPlato];
+        });
+      }
+
+      if (data.tasks) {
+        setTasks(prev => {
+          const prevSafe = prev || [];
+          const incomingTasks = Array.isArray(data.tasks) ? data.tasks : [];
+          return incomingTasks.map((fresh: any) => {
+            const found = prevSafe.find((ex: any) => ex.title === fresh.title);
+            return found ? { ...fresh, status: found.status } : fresh;
+          });
+        });
+      }
+
+      if (data.classes) setClasses(Array.isArray(data.classes) ? data.classes : []);
+      
+      setIsLoggedIn(true); 
+      if (!silent) alert("PLATO Synced Successfully!");
+    } catch (e) { 
+      if (!silent) alert("Network error: Failed to connect to PLATO."); 
+    } 
+    finally { if (!silent) setIsSyncingPlato(false); }
   }
 
-  const toggleNotice = (id: string | number) => {
-    setNotices(notices.map((n) => n.id === id ? { ...n, status: n.status === "unread" ? "read" : "unread" } : n))
+  const handleLogout = () => {
+    setIsLoggedIn(false); 
+    setPlatoCreds({ username: '', password: '' });
+    setClasses([]); 
+    setTasks([]); 
+    setNotices((notices || []).filter(n => n.source !== 'classes'));
+    localStorage.clear();
+    alert("Logged out successfully.");
   }
+
+  const toggleNotice = (id: string | number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setNotices((notices || []).map((n) => n.id === id ? { ...n, status: n.status === "unread" ? "read" : "unread" } : n))
+  }
+
   const toggleTask = (id: string | number) => {
-    setTasks(tasks.map((t) => t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending" } : t))
+    setTasks((tasks || []).map((t) => t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending" } : t))
   }
+
+  if (!isMounted) return null;
 
   return (
-    // 1. ROOT WRAPPER: 'fixed inset-0' locks the app to the screen edges so the browser window cannot scroll
-    <div className="fixed inset-0 w-full flex justify-center bg-[#F4F1E1] sm:bg-[#4A3E3D]/5 sm:p-6 z-0">
-      
-      {/* 
-        2. APP CONTAINER: Uses 'h-full flex flex-col'. 
-        It fills the screen on mobile, but keeps the cute phone borders on desktop ('sm:') 
-      */}
-      <div className="w-full h-full max-w-[400px] flex flex-col relative bg-[#F4F1E1] sm:rounded-[3rem] sm:border-[6px] sm:border-[#4A3E3D] sm:shadow-[12px_12px_0px_rgba(74,62,61,0.2)] overflow-hidden">
-        
-        {/* Binder Clip - Hidden on mobile so it doesn't overlap your iPhone notch */}
-        <div className="hidden sm:flex absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-[#E8E4D3] border-b-2 border-x-2 border-[#4A3E3D] rounded-b-xl justify-center items-center z-30">
-          <div className="w-12 h-1 bg-[#4A3E3D] rounded-full opacity-30" />
+    <div className="font-sans selection:bg-primary/20 selection:text-foreground">
+      <div className="md:hidden min-h-[100dvh] flex items-center justify-center sm:p-4 bg-background sm:bg-background/95">
+        <div className="w-full h-[100dvh] bg-background relative flex flex-col overflow-hidden sm:max-w-[430px] sm:h-[850px] sm:rounded-[2rem] sm:border-4 sm:border-border sm:shadow-[12px_12px_0px_var(--color-border)]">
+          
+          <div className="hidden sm:flex absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-muted border-b-2 border-x-2 border-border rounded-b-xl z-20 justify-center items-center shadow-sm">
+            <div className="w-16 h-1 bg-border rounded-full opacity-30" />
+          </div>
+
+          <div 
+            className="px-6 pb-4 flex justify-between items-end border-b-2 border-dashed border-border/20 z-10 relative bg-background"
+            style={{ paddingTop: 'max(2.5rem, env(safe-area-inset-top))' }}
+          >
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-1 bg-primary px-2 py-0.5 rounded-md border-2 border-border shadow-[2px_2px_0px_var(--color-border)]">
+                  <GraduationCap size={12} className="text-primary-foreground" />
+                  <span className="font-pixel text-[10px] font-bold text-primary-foreground tracking-widest">PNU</span>
+                </div>
+                <div className="flex items-center gap-1 bg-secondary px-2 py-0.5 rounded-md border-2 border-border shadow-[2px_2px_0px_var(--color-border)]">
+                  <span className="font-pixel text-[10px] font-bold text-secondary-foreground tracking-widest">CSE · AI</span>
+                </div>
+              </div>
+              <h1 className="font-pixel text-4xl font-bold tracking-wide text-foreground">PNUtify</h1>
+              <p className="text-sm font-bold text-primary mt-0.5">{format(new Date(), "EEEE, MMM d")}</p>
+            </div>
+            <div className="washi-tape px-3 py-1 font-pixel font-bold text-sm transform rotate-2 text-white">부산대</div>
+          </div>
+
+          <main className="flex-1 overflow-y-auto pb-32 px-6 bg-transparent">
+            {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={setSelectedNotice}/>}
+            {activeTab === "calendar" && <CalendarTab tasks={tasks} classes={classes} />}
+            {activeTab === "tasks" && <JournalTab tasks={tasks} toggleTask={toggleTask} platoCreds={platoCreds} setPlatoCreds={setPlatoCreds} syncPlato={syncPlato} isSyncing={isSyncingPlato} isLoggedIn={isLoggedIn} handleLogout={handleLogout}/>}
+          </main>
+
+          <div 
+            className="absolute bottom-0 left-0 right-0 px-6 z-50 bg-gradient-to-t from-background via-background/90 to-transparent pt-8"
+            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="cozy-card bg-card p-2 flex items-center justify-between relative overflow-hidden mb-2">
+              <NavItem icon={<MessageSquare size={24} />} label="Notices" isActive={activeTab === "notices"} onClick={() => setActiveTab("notices")} />
+              <NavItem icon={<CalendarDays size={24} />} label="Calendar" isActive={activeTab === "calendar"} onClick={() => setActiveTab("calendar")} />
+              <NavItem icon={<Check size={24} strokeWidth={3} />} label="Tasks" isActive={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} />
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* 3. FIXED HEADER: 'shrink-0' ensures it never squishes */}
-        <header className="shrink-0 px-6 pt-6 sm:pt-12 pb-4 flex justify-between items-end border-b-2 border-dashed border-[#4A3E3D]/20 relative z-20 bg-[#F4F1E1]">
-          <div>
-            <h1 className="font-pixel text-4xl font-bold tracking-wide text-[#4A3E3D] leading-none">Student OS.</h1>
-            <p className="text-xs font-bold text-[#E07A5F] mt-2">Vol 2 • {format(new Date(), "EEEE")}</p>
+      <div className="hidden md:flex h-screen overflow-hidden bg-background/95">
+        <aside className="w-64 lg:w-72 flex-shrink-0 flex flex-col border-r-2 border-border bg-card/80 backdrop-blur-sm relative overflow-hidden">
+          <div className="px-6 pt-8 pb-6 border-b-2 border-dashed border-border/30">
+            <div className="washi-tape text-white font-pixel text-[10px] font-bold tracking-widest px-3 py-1 inline-block mb-4 transform -rotate-1">부산대학교</div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-1 bg-primary px-2 py-0.5 rounded-md border-2 border-border shadow-[2px_2px_0px_var(--color-border)]">
+                <GraduationCap size={11} className="text-primary-foreground" />
+                <span className="font-pixel text-[9px] font-bold text-primary-foreground tracking-widest">PNU</span>
+              </div>
+              <div className="flex items-center gap-1 bg-secondary px-2 py-0.5 rounded-md border-2 border-border shadow-[2px_2px_0px_var(--color-border)]">
+                <span className="font-pixel text-[9px] font-bold text-secondary-foreground tracking-widest">CSE · AI</span>
+              </div>
+            </div>
+            <h1 className="font-pixel text-3xl font-bold text-foreground tracking-wide leading-tight">PNUtify</h1>
+            <p className="text-xs font-bold text-muted-foreground mt-2">{format(new Date(), "EEEE")}</p>
+            <p className="font-pixel text-2xl font-bold text-primary">{format(new Date(), "MMM d")}</p>
           </div>
-          <div className="bg-[#F2CC8F] border-2 border-[#4A3E3D] shadow-[2px_2px_0px_#4A3E3D] px-3 py-1 font-pixel font-bold text-xs transform rotate-3 text-[#4A3E3D]">
-            {format(new Date(), "MMM d")}
-          </div>
-        </header>
 
-        {/* 4. SCROLLABLE CONTENT: 'flex-1 overflow-y-auto' allows only this middle section to scroll */}
-        <main className="flex-1 overflow-y-auto px-6 py-4">
-          {activeTab === "notices" && (
-            <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} />
-          )}
-          {activeTab === "calendar" && <CalendarTab tasks={tasks} classes={classes} />}
-          {activeTab === "tasks" && (
-            <JournalTab tasks={tasks} toggleTask={toggleTask} platoCreds={platoCreds} setPlatoCreds={setPlatoCreds} syncPlato={syncPlato} isSyncing={isSyncingPlato} />
-          )}
+          <nav className="flex-1 px-4 py-6 flex flex-col gap-2">
+            <p className="font-pixel text-[10px] font-bold text-muted-foreground tracking-widest uppercase px-2 mb-2">Navigation</p>
+            <SidebarNavItem icon={<MessageSquare size={20} />} label="Notices" badge={(notices || []).filter(n => n.status === "unread").length} isActive={activeTab === "notices"} onClick={() => setActiveTab("notices")} />
+            <SidebarNavItem icon={<CalendarDays size={20} />} label="Calendar" isActive={activeTab === "calendar"} onClick={() => setActiveTab("calendar")} />
+            <SidebarNavItem icon={<Check size={20} strokeWidth={3} />} label="Tasks" badge={(tasks || []).filter(t => t.status === "pending").length} isActive={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} />
+          </nav>
+
+          <div className="px-6 py-5 border-t-2 border-dashed border-border/30">
+            <div className="cozy-card bg-primary/10 p-3 border-primary/30">
+              <p className="font-pixel text-[9px] font-bold text-primary tracking-widest uppercase mb-1">정보의생명공학대학</p>
+              <p className="text-xs font-bold text-muted-foreground leading-snug">인공지능전공</p>
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
+          <div className="flex items-center justify-between mb-8 max-w-4xl">
+            <div>
+              <h2 className="font-pixel text-2xl font-bold text-foreground capitalize">{activeTab === "notices" ? "Notices" : activeTab === "calendar" ? "Calendar" : "All Tasks"}</h2>
+              <p className="text-sm text-muted-foreground font-bold mt-0.5">
+                {activeTab === "notices" && `${(notices || []).filter(n => n.status === "unread").length} unread`}
+                {activeTab === "calendar" && format(new Date(), "MMMM yyyy")}
+                {activeTab === "tasks" && `${(tasks || []).filter(t => t.status === "pending").length} pending`}
+              </p>
+            </div>
+          </div>
+
+          <div className="max-w-4xl">
+             {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={setSelectedNotice}/>}
+             {activeTab === "calendar" && <CalendarTab tasks={tasks} classes={classes} />}
+             {activeTab === "tasks" && <JournalTab tasks={tasks} toggleTask={toggleTask} platoCreds={platoCreds} setPlatoCreds={setPlatoCreds} syncPlato={() => syncPlato(false, platoCreds)} isSyncing={isSyncingPlato} isLoggedIn={isLoggedIn} handleLogout={handleLogout}/>}
+          </div>
         </main>
 
-        {/* 5. FIXED FOOTER: Locks the navigation dock to the bottom of the container */}
-        <div className="shrink-0 px-6 pb-6 pt-2 bg-[#F4F1E1] z-20">
-          <nav className="bg-white p-1.5 flex items-center justify-between rounded-full border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D]">
-            <NavItem icon={<MessageSquare size={22} strokeWidth={2.5} />} label="Notices" isActive={activeTab === "notices"} onClick={() => setActiveTab("notices")} />
-            <NavItem icon={<CalendarDays size={22} strokeWidth={2.5} />} label="Calendar" isActive={activeTab === "calendar"} onClick={() => setActiveTab("calendar")} />
-            <NavItem icon={<Check size={24} strokeWidth={3} />} label="Tasks" isActive={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} />
-          </nav>
-        </div>
+        <aside className="hidden lg:flex w-80 flex-shrink-0 flex-col border-l-2 border-border bg-card/60 overflow-y-auto">
+          <TodayPanel tasks={tasks} classes={classes} />
+        </aside>
+      </div>
 
+      {selectedNotice && (
+        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="cozy-card bg-card w-full max-w-md p-6 flex flex-col h-auto relative">
+            <button onClick={() => setSelectedNotice(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-lg border-2 border-transparent hover:border-border transition-all">
+              <X size={20} />
+            </button>
+            
+            <h2 className="font-bold text-foreground text-xl leading-snug mt-2 mb-6 pr-6">
+              {selectedNotice.title}
+            </h2>
+            
+            <div className="flex flex-col gap-2 shrink-0">
+              {selectedNotice.url && (
+                <a href={selectedNotice.url} target="_blank" rel="noopener noreferrer" className="cozy-btn flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 text-sm transition-all">
+                  Open in Browser <ExternalLink size={16} />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SidebarNavItem({ icon, label, badge, isActive, onClick }: any) {
+  return (
+    <button onClick={onClick} className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm border-2", isActive ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-y-0.5" : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground")}>
+      <span className={cn("transition-transform duration-200", isActive && "scale-110")}>{icon}</span>
+      <span className="font-pixel tracking-wide">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className={cn("ml-auto font-pixel text-[10px] font-bold px-1.5 py-0.5 rounded-md border", isActive ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30" : "bg-primary text-primary-foreground border-border")}>
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function TodayPanel({ tasks, classes }: any) {
+  const today = new Date()
+  const todayClasses = (classes || []).filter((c: any) => Array.isArray(c.days) && c.days.includes(getDay(today)))
+  const upcomingTasks = (tasks || []).filter((t: any) => t.status === "pending").slice(0, 3)
+
+  return (
+    <div className="p-6 flex flex-col gap-6 h-full">
+      <div>
+        <div className="washi-tape text-white font-pixel text-[10px] font-bold tracking-widest px-3 py-1 inline-block mb-3 transform rotate-1">Today</div>
+        <h3 className="font-pixel text-xl font-bold text-foreground">{format(today, "EEEE")}</h3>
+        <p className="font-bold text-muted-foreground text-sm">{format(today, "MMMM d, yyyy")}</p>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <CalendarDays size={14} className="text-primary" />
+          <p className="font-pixel text-xs font-bold text-primary tracking-widest uppercase">Today's Classes</p>
+        </div>
+        {todayClasses.length === 0 ? (
+          <div className="cozy-card p-4 text-center border-dashed">
+            <p className="text-sm font-bold text-muted-foreground">No classes today 🎉</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {todayClasses.map((cls: any) => (
+              <div key={cls.id} className={cn("cozy-card p-3 relative overflow-hidden text-white", cls.color || 'bg-primary')}>
+                <div className="relative z-10">
+                  <p className="font-bold text-sm leading-tight">{cls.name}</p>
+                  <div className="flex items-center gap-2 mt-1 opacity-80">
+                    <span className="font-pixel text-[10px]">{cls.time ? cls.time.split(" ")[0] : "Online"}</span>
+                    <span className="opacity-50">·</span>
+                    <MapPin size={9} />
+                    <span className="font-pixel text-[10px]">{cls.location}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Star size={14} className="text-secondary" fill="currentColor" />
+          <p className="font-pixel text-xs font-bold text-secondary tracking-widest uppercase">Due Soon</p>
+        </div>
+        {upcomingTasks.length === 0 ? (
+          <div className="cozy-card p-4 text-center border-dashed">
+            <p className="text-sm font-bold text-muted-foreground">All caught up!</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {upcomingTasks.map((task: any) => (
+              <div key={task.id} className="cozy-card p-3 bg-background">
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                  <div>
+                    <p className="font-bold text-sm text-foreground leading-tight">{task.title}</p>
+                    <p className="font-pixel text-[10px] text-muted-foreground mt-1">Due {format(safeDate(task.dueDate), "MMM d")}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto cozy-card bg-secondary/10 border-secondary/30 p-4">
+        <p className="font-pixel text-[10px] tracking-widest text-secondary uppercase font-bold mb-1">Progress</p>
+        <div className="flex items-end gap-2">
+          <span className="font-pixel text-3xl font-bold text-foreground">{(tasks || []).filter((t: any) => t.status === "completed").length}</span>
+          <span className="font-bold text-muted-foreground text-sm mb-1">/ {(tasks || []).length} tasks done</span>
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-muted border border-border overflow-hidden">
+          <div className="h-full bg-secondary rounded-full transition-all duration-500" style={{ width: `${(tasks || []).length === 0 ? 0 : ((tasks || []).filter((t: any) => t.status === "completed").length / (tasks || []).length) * 100}%` }} />
+        </div>
       </div>
     </div>
   )
@@ -123,79 +452,122 @@ export default function App() {
 
 function NavItem({ icon, label, isActive, onClick }: any) {
   return (
-    <button onClick={onClick} className={cn("flex-1 flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-full transition-all duration-300", isActive ? "bg-[#F2CC8F] text-[#4A3E3D] border-2 border-[#4A3E3D] shadow-[2px_2px_0px_#4A3E3D]" : "text-[#8C7B76] border-2 border-transparent")}>
+    <button onClick={onClick} className={cn("flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 rounded-xl transition-all duration-300 relative z-10", isActive ? "bg-accent text-accent-foreground border-2 border-border shadow-[2px_2px_0px_var(--color-border)] -translate-y-1" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-2 border-transparent")}>
       <div className={cn("transition-transform duration-300", isActive && "scale-110")}>{icon}</div>
-      <span className={cn("font-pixel text-[10px] tracking-wider font-bold", isActive ? "opacity-100" : "opacity-0 h-0 overflow-hidden")}>{label}</span>
+      <span className={cn("font-pixel text-xs tracking-wider font-bold", isActive ? "opacity-100" : "opacity-0 h-0 overflow-hidden")}>{label}</span>
     </button>
   )
 }
 
-function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading }: any) {
-  const filteredNotices = notices.filter((n: any) => n.source === category)
-  const unreadNotices = filteredNotices.filter((n: any) => n.status === "unread")
-  const readNotices = filteredNotices.filter((n: any) => n.status === "read")
+function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, onSelectNotice }: any) {
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+
+  const filteredNotices = (notices || []).filter((n: any) => n.source === category);
+  
+  const unreadNotices = filteredNotices.filter((n: any) => n.status === "unread");
+  const readNotices = filteredNotices.filter((n: any) => n.status === "read");
+
+  const totalPages = Math.ceil(unreadNotices.length / pageSize) || 1;
+  const paginatedUnread = unreadNotices.slice((page - 1) * pageSize, page * pageSize);
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
-      
-      <div className="flex gap-2 mb-8">
-        <CategoryTab icon={<Globe size={14} />} label="Intl." active={category === "international"} onClick={() => setCategory("international")} />
-        <CategoryTab icon={<Monitor size={14} />} label="CSE" active={category === "cse"} onClick={() => setCategory("cse")} />
-        <CategoryTab icon={<GraduationCap size={14} />} label="PLATO" active={category === "classes"} onClick={() => setCategory("classes")} />
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pt-4">
+      <div className="flex gap-2 mb-6">
+        <CategoryTab icon={<Globe size={16} />} label="Intl." active={category === "international"} onClick={() => { setCategory("international"); setPage(1); }} />
+        <CategoryTab icon={<Monitor size={16} />} label="CSE" active={category === "cse"} onClick={() => { setCategory("cse"); setPage(1); }} />
+        <CategoryTab icon={<GraduationCap size={16} />} label="PLATO" active={category === "classes"} onClick={() => { setCategory("classes"); setPage(1); }} />
       </div>
 
-      <div className="flex flex-col gap-5 mb-8">
-        <div className="flex items-center gap-2 mb-1 text-[#E07A5F]">
-          <Star size={16} fill="currentColor" />
-          <h3 className="font-pixel text-lg font-bold">Unread</h3>
+      <div className="flex flex-col gap-5 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2 text-primary">
+            <Star size={16} fill="currentColor" />
+            <h3 className="font-pixel text-lg font-bold">Unread</h3>
+          </div>
         </div>
 
         {isLoading ? (
-          <div className="bg-white rounded-xl border-2 border-[#4A3E3D] border-dashed p-6 text-center text-[#8C7B76] flex flex-col items-center justify-center gap-2">
-            <span className="animate-spin text-[#E07A5F]"><Sparkles size={24} /></span>
+          <div className="cozy-card p-6 text-center text-muted-foreground flex flex-col items-center justify-center gap-2 bg-card border-dashed">
+            <span className="animate-spin text-primary"><Sparkles size={24} /></span>
             <p className="font-bold font-pixel">Connecting...</p>
           </div>
-        ) : unreadNotices.length === 0 ? (
-          <div className="bg-white rounded-xl border-2 border-[#4A3E3D] border-dashed p-6 text-center text-[#8C7B76] flex flex-col items-center justify-center gap-2">
-            <p className="font-bold font-pixel">No unread notices!</p>
+        ) : paginatedUnread.length === 0 ? (
+          <div className="cozy-card p-6 text-center text-muted-foreground flex flex-col items-center justify-center gap-2 bg-card border-dashed">
+            <p className="font-bold font-pixel">No unread notices here!</p>
           </div>
         ) : (
-          unreadNotices.map((notice: any, i: number) => (
-            <div key={notice.id} onClick={() => toggleNotice(notice.id)} className="bg-white rounded-xl border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[6px_6px_0px_#4A3E3D] transition-all cursor-pointer p-4 relative mt-3">
-               
-               {/* Washi Tape */}
-               <div className={cn("absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-5 bg-[#F2CC8F]/90 border-2 border-[#4A3E3D] shadow-[2px_2px_0px_#4A3E3D] z-20", i % 2 === 0 ? "rotate-2" : "-rotate-3", i % 3 === 0 ? "bg-[#81B29A]/90" : "")} />
-              
-              <div className="flex gap-4 pt-2">
-                <div className="shrink-0 mt-1">
-                  <div className="w-10 h-10 rounded-lg bg-white border-2 border-[#4A3E3D] flex items-center justify-center shadow-[2px_2px_0px_#4A3E3D]">
-                    {notice.icon}
+          paginatedUnread.map((notice: any, i: number) => {
+            const iconComponent = notice.iconType === 'cse' ? <Monitor size={16} className="text-secondary" /> : notice.iconType === 'plato' ? <Scroll size={16} className="text-accent" /> : <Globe size={16} className="text-primary" />;
+            return (
+              <div key={notice.id} onClick={() => onSelectNotice(notice)} className="cozy-card interactive p-4 relative group cursor-pointer bg-card">
+                <div className={cn("absolute -top-3 left-1/2 -translate-x-1/2 w-12 h-5 washi-tape z-20", i % 2 === 0 ? "rotate-2" : "-rotate-3")} />
+                
+                <div className="flex gap-3 pt-2 items-start">
+                  <div className="mt-1">
+                    <div className="w-10 h-10 rounded-xl bg-background border-2 border-border flex items-center justify-center shadow-[2px_2px_0px_var(--color-border)]">{iconComponent}</div>
                   </div>
-                </div>
-                <div className="pr-2">
-                  <h3 className="font-bold text-[#4A3E3D] text-sm leading-snug mb-2 line-clamp-2">{notice.title}</h3>
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-[#8C7B76] uppercase tracking-wider">
-                    <span>{notice.date}</span>
-                    <span className="text-[#E07A5F] opacity-70">• Tap to read</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-foreground text-base leading-tight mb-2">{notice.title}</h3>
+                    
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      <span>{formatNoticeDate(notice.date)}</span>
+                      <span className="opacity-50">•</span>
+                      <span 
+                        onClick={(e) => { e.stopPropagation(); toggleNotice(notice.id, e); }} 
+                        className="text-primary italic hover:underline cursor-pointer normal-case"
+                      >
+                        Tap to mark read
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between cozy-card p-3 bg-card mb-8">
+          <button disabled={page === 1} onClick={() => setPage(p => Math.max(p - 1, 1))} className="flex items-center gap-1 font-pixel text-xs font-bold px-3 py-1.5 rounded-lg border-2 border-border bg-background disabled:opacity-30 disabled:cursor-not-allowed cozy-btn">
+            <ChevronLeft size={14} /> Prev
+          </button>
+          <span className="font-pixel text-xs font-bold text-foreground">Page {page} / {totalPages}</span>
+          <button disabled={page === totalPages} onClick={() => setPage(p => Math.min(p + 1, totalPages))} className="flex items-center gap-1 font-pixel text-xs font-bold px-3 py-1.5 rounded-lg border-2 border-border bg-background disabled:opacity-30 disabled:cursor-not-allowed cozy-btn">
+            Next <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
       {readNotices.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-4 text-[#8C7B76]">
+        <div className="mt-8 mb-4">
+          <div className="flex items-center gap-2 mb-4 text-muted-foreground">
             <h3 className="font-pixel text-lg font-bold">Read</h3>
-            <div className="h-0.5 flex-1 bg-[#4A3E3D]/20 border-dashed" />
+            <div className="h-0.5 flex-1 bg-border/20 border-dashed" />
           </div>
+
           <div className="flex flex-col gap-3">
             {readNotices.map((notice: any) => (
-              <div key={notice.id} onClick={() => toggleNotice(notice.id)} className="bg-[#E8E4D3]/30 border-2 border-[#4A3E3D] border-dashed rounded-xl p-3 flex items-center gap-3 opacity-70 hover:opacity-100 cursor-pointer">
-                <div className="flex-1"><h4 className="font-bold text-[#4A3E3D] text-sm line-through decoration-2 mb-1 line-clamp-1">{notice.title}</h4></div>
-                <div className="w-6 h-6 shrink-0 rounded bg-white border-2 border-[#4A3E3D] flex items-center justify-center text-[#4A3E3D]"><Check size={14} strokeWidth={3} /></div>
+              <div
+                key={notice.id}
+                onClick={() => onSelectNotice(notice)}
+                className="cozy-card interactive p-3 flex items-center gap-3 bg-muted/30 opacity-70 hover:opacity-100 transition-opacity border-dashed cursor-pointer"
+              >
+                <div className="flex-1">
+                  <h4 className="font-bold text-foreground line-through decoration-2 mb-1">
+                    {notice.title}
+                  </h4>
+                  <span className="font-pixel text-[10px] text-muted-foreground">
+                    {formatNoticeDate(notice.date)}
+                  </span>
+                </div>
+                <div 
+                  onClick={(e) => { e.stopPropagation(); toggleNotice(notice.id, e); }} 
+                  className="w-6 h-6 shrink-0 rounded bg-background border-2 border-border flex items-center justify-center text-foreground hover:bg-muted"
+                >
+                  <Check size={12} strokeWidth={3} />
+                </div>
               </div>
             ))}
           </div>
@@ -207,7 +579,7 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading }:
 
 function CategoryTab({ icon, label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={cn("flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full transition-all font-pixel text-xs font-bold border-2", active ? "bg-[#4A3E3D] text-white border-[#4A3E3D] shadow-[3px_3px_0px_#E07A5F] -translate-y-1" : "bg-white text-[#8C7B76] border-[#4A3E3D] shadow-[2px_2px_0px_#4A3E3D]")}>
+    <button onClick={onClick} className={cn("flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all font-pixel text-sm font-bold border-2", active ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-1" : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted")}>
       {icon} {label}
     </button>
   )
@@ -217,47 +589,64 @@ function CalendarTab({ tasks, classes }: any) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const calendarDays = eachDayOfInterval({ start: startOfWeek(startOfMonth(selectedDate)), end: endOfWeek(endOfMonth(selectedDate)) })
   
-  const dayTasks = tasks.filter((t: any) => isSameDay(t.dueDate, selectedDate))
-  const dayClasses = classes.filter((c: any) => c.days.includes(getDay(selectedDate)))
+  const parsedTasks = (tasks || []).map((t: any) => ({ ...t, dueDate: safeDate(t.dueDate) }));
+  const dayTasks = parsedTasks.filter((t: any) => isSameDay(t.dueDate, selectedDate))
+  const dayClasses = (classes || []).filter((c: any) => Array.isArray(c.days) && c.days.includes(getDay(selectedDate)))
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
-      <div className="mb-6 bg-[#81B29A] text-white p-4 border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] rounded-xl transform rotate-1 relative overflow-hidden">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pt-4">
+      <div className="mb-6 bg-secondary text-secondary-foreground p-4 border-2 border-border shadow-[4px_4px_0px_var(--color-border)] rounded-xl transform rotate-1 relative overflow-hidden">
+        <div className="absolute -right-2 -top-2 opacity-20"><CalendarDays size={72} /></div>
         <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center gap-3"><CalendarDays size={24} /><h2 className="font-pixel text-2xl font-bold tracking-wider">{format(selectedDate, "MMMM")}</h2></div>
-          <span className="font-bold opacity-80 font-pixel">{format(selectedDate, "yyyy")}</span>
+          <div className="flex items-center gap-3"><CalendarDays size={28} /><h2 className="font-pixel text-3xl font-bold tracking-wider">{format(selectedDate, "MMMM")}</h2></div>
+          <span className="font-bold opacity-80">{format(selectedDate, "yyyy")}</span>
         </div>
       </div>
-      <div className="bg-white border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] rounded-xl p-3 mb-8">
+      <div className="cozy-card bg-card p-3 mb-8">
         <div className="grid grid-cols-7 gap-1 mb-2">
-          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => <div key={d} className="text-center font-pixel text-[10px] font-bold text-[#8C7B76]">{d}</div>)}
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => <div key={d} className="text-center font-pixel text-[10px] font-bold text-muted-foreground">{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {calendarDays.map((date, i) => (
-            <button key={i} onClick={() => setSelectedDate(date)} className={cn("flex flex-col items-center justify-center p-1 h-10 rounded-lg border-2 transition-all", !isSameMonth(date, selectedDate) && "opacity-30", isSameDay(date, selectedDate) ? "bg-[#4A3E3D] text-white border-[#4A3E3D]" : "bg-white text-[#4A3E3D] border-transparent hover:border-[#4A3E3D]/20", isToday(date) && !isSameDay(date, selectedDate) && "border-[#E07A5F] text-[#E07A5F]")}>
-              <span className="font-pixel text-sm font-bold">{format(date, "d")}</span>
-            </button>
-          ))}
+          {calendarDays.map((date, i) => {
+            const isSelected = isSameDay(date, selectedDate);
+            const isCurrentMonth = isSameMonth(date, selectedDate);
+            const hasTask = parsedTasks.some((t: any) => isSameDay(t.dueDate, date));
+            const hasClass = (classes || []).some((c: any) => Array.isArray(c.days) && c.days.includes(getDay(date)));
+            return (
+              <button key={i} onClick={() => setSelectedDate(date)} className={cn("cozy-btn flex flex-col items-center p-1 h-12 relative transition-all", !isCurrentMonth && "opacity-30", isSelected ? "bg-foreground text-background shadow-[0px_0px_0px]" : "bg-background text-foreground hover:bg-muted", isToday(date) && !isSelected && "border-primary text-primary")}>
+                <span className="font-pixel text-sm font-bold mt-1">{format(date, "d")}</span>
+                <div className="flex gap-1 mt-auto mb-1">
+                  {hasTask && <div className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-accent" : "bg-primary")} />}
+                  {hasClass && <div className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-background" : "bg-secondary")} />}
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
       <div>
-        <h3 className="font-pixel text-lg font-bold mb-4 text-[#4A3E3D] border-b-2 border-[#4A3E3D]/20 pb-2">{format(selectedDate, "EEEE, MMMM d")}</h3>
+        <h3 className="font-pixel text-lg font-bold mb-4 text-foreground border-b-2 border-border/20 pb-2">{format(selectedDate, "EEEE, MMMM d")}</h3>
         <div className="flex flex-col gap-4">
           {dayClasses.map((cls: any) => (
-            <div key={cls.id} className={cn("p-3 rounded-xl border-2 border-[#4A3E3D] shadow-[3px_3px_0px_#4A3E3D]", cls.color)}>
-              <div className="flex gap-3 items-center">
-                <div><h4 className="font-bold text-sm">{cls.name}</h4><p className="font-pixel text-[10px] mt-1 opacity-90"><MapPin size={10} className="inline"/> {cls.location}</p></div>
+            <div key={cls.id} className={cn("cozy-card p-3 relative overflow-hidden text-white", cls.color || "bg-primary")}>
+              <div className="relative z-10 flex gap-3 items-center">
+                <div className="font-pixel text-sm font-bold w-12 text-center leading-tight">{cls.time ? cls.time.split(" ")[0] : "Online"}</div>
+                <div className="w-0.5 h-8 bg-current opacity-20" />
+                <div>
+                  <h4 className="font-bold">{cls.name}</h4>
+                  <p className="font-pixel text-[10px] flex items-center gap-1 opacity-80"><MapPin size={10} /> {cls.location}</p>
+                </div>
               </div>
             </div>
           ))}
           {dayTasks.map((task: any) => (
-            <div key={task.id} className="p-3 bg-white border-2 border-[#4A3E3D] border-dashed rounded-xl flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-[#E07A5F]" />
-              <h4 className="font-bold text-[#4A3E3D] text-sm">{task.title}</h4>
+            <div key={task.id} className="cozy-card p-3 flex flex-col gap-1 border-dashed">
+              <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" /><h4 className="font-bold text-foreground text-sm">{task.title}</h4></div>
+              <p className="font-pixel text-[10px] text-muted-foreground pl-4 uppercase">Task • {task.course}</p>
             </div>
           ))}
           {dayClasses.length === 0 && dayTasks.length === 0 && (
-            <p className="text-center text-sm font-bold text-[#8C7B76] italic py-4">Nothing scheduled for today.</p>
+            <p className="text-center text-sm font-bold text-muted-foreground italic py-4">Nothing scheduled for today.</p>
           )}
         </div>
       </div>
@@ -265,45 +654,74 @@ function CalendarTab({ tasks, classes }: any) {
   )
 }
 
-function JournalTab({ tasks, toggleTask, platoCreds, setPlatoCreds, syncPlato, isSyncing }: any) {
-  const pending = tasks.filter((a: any) => a.status === "pending")
-  const completed = tasks.filter((a: any) => a.status === "completed")
+function JournalTab({ tasks, toggleTask, platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedIn, handleLogout }: any) {
+  const pending = (tasks || []).filter((a: any) => a.status === "pending")
+  const completed = (tasks || []).filter((a: any) => a.status === "completed")
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pt-4 max-w-2xl">
       
-      <div className="mb-6 bg-white border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] rounded-xl p-4 flex flex-col gap-3">
-        <p className="font-pixel text-sm font-bold text-[#4A3E3D] flex items-center gap-2"><GraduationCap size={16}/> Sync PLATO Dashboard</p>
-        <div className="flex gap-2">
-          <input type="text" placeholder="ID" className="flex-1 border-2 border-[#4A3E3D] rounded-lg p-2 text-sm focus:outline-none focus:border-[#E07A5F]" value={platoCreds.username} onChange={e => setPlatoCreds({...platoCreds, username: e.target.value})} />
-          <input type="password" placeholder="Pass" className="flex-1 border-2 border-[#4A3E3D] rounded-lg p-2 text-sm focus:outline-none focus:border-[#E07A5F]" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
+      {isLoggedIn ? (
+        <div className="cozy-card bg-card p-5 mb-8 flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <p className="font-pixel text-sm font-bold text-foreground flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> PLATO Connected</p>
+            <span className="bg-primary/20 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/30">{platoCreds.username}</span>
+          </div>
+          <button onClick={handleLogout} className="cozy-btn bg-muted hover:bg-muted/80 text-foreground font-bold py-2.5 transition-all text-xs font-pixel tracking-wide">
+            Disconnect / Logout
+          </button>
         </div>
-        <button onClick={syncPlato} disabled={isSyncing} className="bg-[#81B29A] hover:bg-[#6c9883] border-2 border-[#4A3E3D] shadow-[2px_2px_0px_#4A3E3D] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none rounded-lg text-white font-bold py-2 mt-1 transition-all">
-          {isSyncing ? 'Scraping...' : 'Fetch Deadlines & Classes'}
-        </button>
-      </div>
-
-      <div className="mb-8 bg-[#F2CC8F] text-[#4A3E3D] p-4 border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] rounded-xl transform -rotate-1 relative overflow-hidden flex justify-between items-center">
-        <div className="flex items-center gap-3 relative z-10"><Check size={28} strokeWidth={3} /><h2 className="font-pixel text-2xl font-bold tracking-wider">All Tasks</h2></div>
-        <div className="relative z-10 bg-white border-2 border-[#4A3E3D] font-pixel font-bold px-3 py-1 rounded-lg shadow-[2px_2px_0px_#4A3E3D] rotate-3">{pending.length} Left</div>
-      </div>
-
-      <div className="flex flex-col gap-4">
-        {pending.map((task: any) => (
-          <div key={task.id} onClick={() => toggleTask(task.id)} className="bg-white rounded-xl border-2 border-[#4A3E3D] shadow-[4px_4px_0px_#4A3E3D] hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[6px_6px_0px_#4A3E3D] transition-all cursor-pointer p-4 flex gap-4 items-center">
-            <div className="w-6 h-6 rounded border-2 border-[#4A3E3D] flex items-center justify-center shrink-0"></div>
-            <div className="flex-1">
-              <h4 className="font-bold text-[#4A3E3D] text-sm mb-1">{task.title}</h4>
-              <span className="font-pixel text-[10px] font-bold text-[#E07A5F] border-2 border-[#E07A5F]/20 bg-[#E07A5F]/10 px-2 py-0.5 rounded uppercase tracking-wider">Due {format(task.dueDate, "MMM d")}</span>
+      ) : (
+        <div className="cozy-card bg-card p-5 mb-8 flex flex-col gap-4">
+          <p className="font-pixel text-sm font-bold text-foreground flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> Sync PLATO Dashboard</p>
+          <div className="flex flex-col gap-3">
+            <input type="text" placeholder="Student ID" className="w-full bg-background border-2 border-border rounded-lg p-3 text-sm focus:outline-none focus:border-accent" value={platoCreds.username} onChange={e => setPlatoCreds({...platoCreds, username: e.target.value})} />
+            <div className="relative w-full">
+              <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-accent" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
             </div>
           </div>
-        ))}
-        {completed.map((task: any) => (
-          <div key={task.id} onClick={() => toggleTask(task.id)} className="bg-[#E8E4D3]/30 border-2 border-[#4A3E3D] border-dashed rounded-xl p-4 flex gap-4 items-center cursor-pointer opacity-70 hover:opacity-100 transition-opacity">
-            <div className="w-6 h-6 rounded bg-[#81B29A] border-2 border-[#4A3E3D] flex items-center justify-center shrink-0 text-white"><Check size={16} strokeWidth={4} /></div>
-            <div className="flex-1"><h4 className="font-bold text-[#4A3E3D] text-sm line-through decoration-2 opacity-60">{task.title}</h4></div>
+          <button onClick={syncPlato} disabled={isSyncing} className="cozy-btn bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 transition-all">
+            {isSyncing ? 'Scraping...' : 'Fetch Deadlines & Classes'}
+          </button>
+        </div>
+      )}
+
+      <div className="mb-6 bg-primary text-primary-foreground p-4 border-2 border-border shadow-[4px_4px_0px_var(--color-border)] rounded-xl transform -rotate-1 relative overflow-hidden flex justify-between items-center">
+        <div className="absolute -left-4 -top-4 opacity-20"><Check size={80} strokeWidth={4} /></div>
+        <div className="flex items-center gap-3 relative z-10"><Check size={28} strokeWidth={3} /><h2 className="font-pixel text-3xl font-bold tracking-wider">All Tasks</h2></div>
+        <div className="relative z-10 bg-secondary border-2 border-border text-secondary-foreground font-pixel font-bold px-3 py-1 rounded-lg shadow-[2px_2px_0px_var(--color-border)] rotate-3">{pending.length} Left</div>
+      </div>
+
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
+          {pending.map((task: any) => (
+            <div key={task.id} onClick={() => toggleTask(task.id)} className="cozy-card interactive p-4 flex gap-4 items-start cursor-pointer group bg-card">
+              <div className="w-8 h-8 rounded-lg border-2 border-border cozy-btn group-hover:bg-primary/20 flex items-center justify-center shrink-0 transition-colors mt-0.5"></div>
+              <div className="flex-1">
+                <h4 className="font-bold text-foreground text-xl leading-tight mb-2">{task.title}</h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-pixel text-[10px] uppercase font-bold text-primary-foreground bg-primary px-2 py-1 rounded-md border-2 border-border shadow-[1px_1px_0px_var(--color-border)]">{task.course}</span>
+                  <span className="font-pixel text-xs font-bold text-secondary flex items-center gap-1 border-2 border-secondary/30 bg-secondary/10 px-2 py-0.5 rounded-md">Due {format(safeDate(task.dueDate), "MMM d")}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {completed.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-4 text-muted-foreground"><h3 className="font-pixel text-lg font-bold">Done</h3><div className="h-0.5 flex-1 bg-border/20 border-dashed" /></div>
+            <div className="flex flex-col gap-3">
+              {completed.map((task: any) => (
+                <div key={task.id} onClick={() => toggleTask(task.id)} className="cozy-card p-4 flex gap-4 items-center cursor-pointer opacity-70 bg-muted/20 hover:opacity-100 transition-opacity border-dashed">
+                  <div className="w-8 h-8 rounded-lg bg-secondary border-2 border-border flex items-center justify-center shrink-0 cozy-btn text-white"><Check size={20} strokeWidth={4} /></div>
+                  <div className="flex-1"><h4 className="font-bold text-foreground text-lg line-through decoration-2 mb-1 opacity-60">{task.title}</h4></div>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   )
