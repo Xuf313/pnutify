@@ -35,6 +35,18 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isSyncingPlato, setIsSyncingPlato] = useState(false)
   const [selectedNotice, setSelectedNotice] = useState<any>(null)
+  const [detail, setDetail] = useState<any>(null)
+
+  useEffect(() => {
+    if (!selectedNotice || !selectedNotice.url) { setDetail(null); return }
+    let cancelled = false
+    setDetail(null)
+    fetch(`/api/notices/notice-detail?url=${encodeURIComponent(selectedNotice.url)}&title=${encodeURIComponent(selectedNotice.title || '')}`)
+      .then((res) => res.json())
+      .then((data) => { if (!cancelled && data.title) setDetail(data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedNotice])
 
   useEffect(() => {
     setIsMounted(true);
@@ -336,11 +348,11 @@ export default function App() {
             <button onClick={() => setSelectedNotice(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-lg border-2 border-transparent hover:border-border transition-all">
               <X size={20} />
             </button>
-            
+
             <h2 className="font-bold text-foreground text-xl leading-snug mt-2 mb-6 pr-6">
-              {selectedNotice.title}
+              {detail?.title || selectedNotice.title}
             </h2>
-            
+
             <div className="flex flex-col gap-2 shrink-0">
               {selectedNotice.url && (
                 <a href={selectedNotice.url} target="_blank" rel="noopener noreferrer" className="cozy-btn flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 text-sm transition-all">

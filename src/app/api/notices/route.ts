@@ -6,7 +6,6 @@ export async function GET() {
     const scrapedNotices: { id: string; title: string; date: string; source: string; url: string; status: string; }[] = [];
     let idCounter = 1;
 
-    // Filter helper: Only keep notices from August 2026 onwards
     const isFromAugustOnwards = (dateStr: string) => {
       const cleanDate = dateStr.replace(/\./g, '-');
       const noticeDate = new Date(cleanDate);
@@ -14,54 +13,63 @@ export async function GET() {
       return noticeDate >= cutoffDate || dateStr.includes('2026.08') || dateStr.includes('2026-08');
     };
 
-    // 1. Scrape CSE Notice Board (Updated URL)
-    const cseUrl = 'https://cse.pusan.ac.kr/cse/14221/subview.do?enc=Zm5jdDF8QEB8JTJGYmJzJTJGY3NlJTJGMjA1NSUyRmFydGNsTGlzdC5kbyUzRg%3D%3D';
+    const cleanTitle = (t: string) => t.replace(/새글/g, '').replace(/\s+/g, ' ').trim();
+
+    // 1. Scrape CSE Notice Board
+    const cseUrl = 'https://cse.pusan.ac.kr/cse/14221/subview.do';
     const cseRes = await fetch(cseUrl, { cache: 'no-store' });
     
     if (cseRes.ok) {
       const $cse = cheerio.load(await cseRes.text());
       $cse('table tbody tr').each((_, el) => {
-        const titleEl = $cse(el).find('td.title a, td.td-subject a, td a').first();
-        const title = titleEl.text().trim() || $cse(el).find('td').eq(1).text().trim();
+        const $row = $cse(el);
+        const titleEl = $row.find('td.title a, td.td-subject a, td a').first();
+        
+        // Aggressively hunt for the hidden full title attribute
+        const possibleTitleAttr = titleEl.attr('title') || $row.find('[title]').attr('title') || '';
+        let rawTitle = titleEl.text() || $row.find('td').eq(1).text();
+        
+        // If the hidden title is longer than the visible text, use it!
+        if (possibleTitleAttr && possibleTitleAttr.length > rawTitle.length) {
+          rawTitle = possibleTitleAttr;
+        }
+        
+        const title = cleanTitle(rawTitle);
         const href = titleEl.attr('href');
         const url = href ? (href.startsWith('http') ? href : `https://cse.pusan.ac.kr${href}`) : '';
-        const date = $cse(el).find('td.date, td.td-date').text().trim() || $cse(el).find('td').eq(3).text().trim();
+        const date = $row.find('td.date, td.td-date').text().trim() || $row.find('td').eq(3).text().trim();
         
         if (title && date && isFromAugustOnwards(date)) {
-          scrapedNotices.push({ 
-            id: `cse_${idCounter++}`, 
-            title: title.replace(/\s+/g, ' '), 
-            date, 
-            source: 'cse', 
-            url, 
-            status: 'unread' 
-          });
+          scrapedNotices.push({ id: `cse_${idCounter++}`, title, date, source: 'cse', url, status: 'unread' });
         }
       });
     }
 
-    // 2. Scrape International Office (OIA) Notice Board (Updated URL)
+    // 2. Scrape International Office (OIA) Notice Board
     const intlUrl = 'https://international.pusan.ac.kr/international/15224/subview.do';
     const intlRes = await fetch(intlUrl, { cache: 'no-store' });
     
     if (intlRes.ok) {
       const $intl = cheerio.load(await intlRes.text());
       $intl('table tbody tr').each((_, el) => {
-        const titleEl = $intl(el).find('td.title a, td.td-subject a, td a').first();
-        const title = titleEl.text().trim() || $intl(el).find('td').eq(1).text().trim();
+        const $row = $intl(el);
+        const titleEl = $row.find('td.title a, td.td-subject a, td a').first();
+        
+        // Aggressively hunt for the hidden full title attribute
+        const possibleTitleAttr = titleEl.attr('title') || $row.find('[title]').attr('title') || '';
+        let rawTitle = titleEl.text() || $row.find('td').eq(1).text();
+        
+        if (possibleTitleAttr && possibleTitleAttr.length > rawTitle.length) {
+          rawTitle = possibleTitleAttr;
+        }
+
+        const title = cleanTitle(rawTitle);
         const href = titleEl.attr('href');
         const url = href ? (href.startsWith('http') ? href : `https://international.pusan.ac.kr${href}`) : '';
-        const date = $intl(el).find('td.date, td.td-date').text().trim() || $intl(el).find('td').eq(3).text().trim();
+        const date = $row.find('td.date, td.td-date').text().trim() || $row.find('td').eq(3).text().trim();
         
         if (title && date && isFromAugustOnwards(date)) {
-          scrapedNotices.push({ 
-            id: `intl_${idCounter++}`, 
-            title: title.replace(/\s+/g, ' '), 
-            date, 
-            source: 'international', 
-            url, 
-            status: 'unread' 
-          });
+          scrapedNotices.push({ id: `intl_${idCounter++}`, title, date, source: 'international', url, status: 'unread' });
         }
       });
     }
