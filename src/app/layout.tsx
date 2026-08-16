@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PNUtify",
   description: "notice board and class schedule for Pusan National University CSE students",
+  appleWebApp: {
+    capable: true,
+    title: "PNUtify",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
