@@ -1,0 +1,14 @@
+name: Check for new PNU notices
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the push-check endpoint
+        run: |
+          curl -sf "https://${{ secrets.APP_DOMAIN }}/api/push/send?secret=${{ secrets.CRON_SECRET }}"
