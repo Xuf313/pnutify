@@ -71,19 +71,19 @@ export async function scrapeAllNotices(): Promise<ScrapedNotice[]> {
   const cseUrl = 'https://cse.pusan.ac.kr/cse/14221/subview.do';
   const intlUrl = 'https://international.pusan.ac.kr/international/15224/subview.do';
 
-  const [cseRes, intlRes] = await Promise.all([
+  const [cseRes, intlRes] = await Promise.allSettled([
     fetch(cseUrl, { next: { revalidate: 300 } }),
     fetch(intlUrl, { next: { revalidate: 300 } }),
   ]);
 
   const notices: ScrapedNotice[] = [];
 
-  if (cseRes.ok) {
-    const $cse = cheerio.load(await cseRes.text());
+  if (cseRes.status === 'fulfilled' && cseRes.value.ok) {
+    const $cse = cheerio.load(await cseRes.value.text());
     notices.push(...scrapeBoard($cse, 'cse', 'https://cse.pusan.ac.kr', 'cse'));
   }
-  if (intlRes.ok) {
-    const $intl = cheerio.load(await intlRes.text());
+  if (intlRes.status === 'fulfilled' && intlRes.value.ok) {
+    const $intl = cheerio.load(await intlRes.value.text());
     notices.push(...scrapeBoard($intl, 'international', 'https://international.pusan.ac.kr', 'intl'));
   }
 
