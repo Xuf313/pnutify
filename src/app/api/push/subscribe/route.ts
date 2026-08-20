@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 
-const redis = Redis.fromEnv();
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
 
 // Single-user app — one fixed key is enough, no subscriptions table needed.
 const SUB_KEY = 'push:subscription';
 
 export async function POST(request: Request) {
+  if (!redis) {
+    return NextResponse.json({ error: 'Push storage is not configured' }, { status: 503 });
+  }
+
   try {
     const subscription = await request.json();
     if (!subscription?.endpoint) {
@@ -20,6 +26,10 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
+  if (!redis) {
+    return NextResponse.json({ error: 'Push storage is not configured' }, { status: 503 });
+  }
+
   try {
     await redis.del(SUB_KEY);
     return NextResponse.json({ ok: true });

@@ -4,13 +4,12 @@ import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
 import { scrapeAllNotices } from '@/lib/scrapeNotices';
 
-const redis = Redis.fromEnv();
-
 const SUB_KEY = 'push:subscription';
 const SEEN_KEY = 'push:seen-ids';
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const hasRedisEnv = Boolean(redisUrl && redisToken);
+const redis = hasRedisEnv ? new Redis({ url: redisUrl!, token: redisToken! }) : null;
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -29,7 +28,7 @@ export async function GET(request: Request) {
 
   try {
     const notices = await scrapeAllNotices();
-    const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
+    const seenIdsArr = redis ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
     const seenIds = new Set(seenIdsArr);
     const newNotices = notices.filter((n) => !seenIds.has(n.id));
 
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
     const isFirstRun = seenIdsArr.length === 0;
 
     if (!isFirstRun && newNotices.length > 0) {
-      const subscription = hasRedisEnv ? await redis.get<unknown>(SUB_KEY) : null;
+      const subscription = redis ? await redis.get<unknown>(SUB_KEY) : null;
       if (isPushSubscription(subscription) && hasVapidKeys) {
         webpush.setVapidDetails(
           process.env.VAPID_SUBJECT || 'mailto:notices@example.com',
@@ -61,13 +60,15 @@ export async function GET(request: Request) {
               ? (err as { statusCode?: number }).statusCode
               : undefined;
           if (statusCode === 404 || statusCode === 410) {
-            await redis.del(SUB_KEY);
+            if (redis) {
+              await redis.del(SUB_KEY);
+            }
           }
         }
       }
     }
 
-    if (hasRedisEnv) {
+    if (redis) {
       await redis.set(SEEN_KEY, notices.map((n) => n.id));
     }
     return NextResponse.json({ ok: true, newCount: isFirstRun ? 0 : newNotices.length, firstRun: isFirstRun });
