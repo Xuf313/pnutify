@@ -10,5 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Hit the push-check endpoint
+        if: ${{ secrets.APP_DOMAIN != '' && secrets.CRON_SECRET != '' }}
         run: |
           curl -sf "https://${{ secrets.APP_DOMAIN }}/api/push/send?secret=${{ secrets.CRON_SECRET }}"
