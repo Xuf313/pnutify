@@ -104,6 +104,14 @@ export default function App() {
   }, [selectedNotice])
 
   useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') setSelectedNotice(null)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  useEffect(() => {
     setIsMounted(true);
 
     try {
@@ -300,6 +308,11 @@ export default function App() {
     setNotices((notices || []).map((n) => n.id === id ? { ...n, status: n.status === "unread" ? "read" : "unread" } : n))
   }
 
+  const openNotice = (notice: any) => {
+    setSelectedNotice(notice)
+    setNotices((notices || []).map((n) => n.id === notice.id ? { ...n, status: "read" } : n))
+  }
+
   const toggleTask = (id: string | number) => {
     setTasks((tasks || []).map((t) => t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending" } : t))
   }
@@ -356,7 +369,7 @@ export default function App() {
           </div>
 
           <main className="flex-1 overflow-y-auto pb-32 px-6 bg-transparent">
-            {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={setSelectedNotice}/>}
+            {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={openNotice}/>}
             {activeTab === "calendar" && <CalendarTab tasks={tasks} classes={classes} />}
             {activeTab === "tasks" && <JournalTab tasks={tasks} toggleTask={toggleTask} onAddTask={addTask} onEditTask={editTask} onDeleteTask={deleteTask} />}
             {activeTab === "profile" && <ProfileTab platoCreds={platoCreds} setPlatoCreds={setPlatoCreds} syncPlato={syncPlato} isSyncing={isSyncingPlato} isLoggedIn={isLoggedIn} handleLogout={handleLogout} classes={classes} />}
@@ -428,7 +441,7 @@ export default function App() {
           </div>
 
           <div className="max-w-4xl">
-             {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={setSelectedNotice}/>}
+             {activeTab === "notices" && <NoticesTab notices={notices} toggleNotice={toggleNotice} category={noticeCategory} setCategory={setNoticeCategory} isLoading={isLoadingNotices} onSelectNotice={openNotice}/>}
              {activeTab === "calendar" && <CalendarTab tasks={tasks} classes={classes} />}
              {activeTab === "tasks" && <JournalTab tasks={tasks} toggleTask={toggleTask} onAddTask={addTask} onEditTask={editTask} onDeleteTask={deleteTask} />}
              {activeTab === "profile" && <ProfileTab platoCreds={platoCreds} setPlatoCreds={setPlatoCreds} syncPlato={() => syncPlato(false, platoCreds)} isSyncing={isSyncingPlato} isLoggedIn={isLoggedIn} handleLogout={handleLogout} classes={classes} />}
