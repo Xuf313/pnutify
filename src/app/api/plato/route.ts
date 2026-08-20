@@ -118,6 +118,8 @@ export async function POST(request: Request) {
       const courseName = $dash(el).find('.coursename').text().trim();
       const title = $dash(el).find('.subject').text().trim();
       const dateStr = $dash(el).find('.date').text().trim(); 
+      const href = $dash(el).find('.subject a, a.subject').attr('href') || $dash(el).find('a').first().attr('href');
+      const url = href ? (href.startsWith('http') ? href : `https://plato.pusan.ac.kr${href.startsWith('/') ? '' : '/'}${href}`) : '';
 
       // ✅ FIX: Only push to the array if a specific course name exists! 
       // This naturally ignores site-wide PLATO ads and system notices.
@@ -127,6 +129,7 @@ export async function POST(request: Request) {
           title: `[${courseName}] ${title}`, 
           date: dateStr.split(' ')[0], 
           source: 'classes',
+          url,
           status: 'unread'
         });
       }
@@ -156,4 +159,4 @@ export async function POST(request: Request) {
     console.error('PLATO scraping error:', error);
     return NextResponse.json({ error: 'Failed to sync with PLATO. Network error.' }, { status: 500 });
   }
-} 
+}
