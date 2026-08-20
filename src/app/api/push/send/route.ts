@@ -15,15 +15,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-    return NextResponse.json({ error: 'VAPID keys not configured' }, { status: 500 });
-  }
-
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:notices@example.com',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  );
+  const hasVapidKeys = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
   try {
     const notices = await scrapeAllNotices();
@@ -37,7 +29,12 @@ export async function GET(request: Request) {
 
     if (!isFirstRun && newNotices.length > 0) {
       const subscription = await redis.get<any>(SUB_KEY);
-      if (subscription) {
+      if (subscription && hasVapidKeys) {
+        webpush.setVapidDetails(
+          process.env.VAPID_SUBJECT || 'mailto:notices@example.com',
+          process.env.VAPID_PUBLIC_KEY!,
+          process.env.VAPID_PRIVATE_KEY!
+        );
         const body =
           newNotices.length === 1
             ? newNotices[0].title
