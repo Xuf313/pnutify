@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 
-const ALLOWED_HOSTS = ['cse.pusan.ac.kr', 'international.pusan.ac.kr'];
+const ALLOWED_HOSTS = ['cse.pusan.ac.kr', 'international.pusan.ac.kr', 'plato.pusan.ac.kr'];
 
 // Listing pages sometimes link through a `?enc=<base64>` menu-context wrapper
 // instead of the direct article URL. That wrapper can 404 once the menu
@@ -41,6 +41,15 @@ export async function GET(request: Request) {
     const html = await res.text();
     if (/찾을\s*수\s*없|존재\s*하지\s*않/.test(html.slice(0, 3000))) {
       return NextResponse.json({ error: 'Source page not found', sourceUrl: parsed.toString(), title: listingTitle || null });
+    }
+    // PLATO (Moodle) pages need an active login session, which this
+    // stateless fetch doesn't have — detect the login wall rather than
+    // silently extracting text from a login form.
+    if (parsed.hostname === 'plato.pusan.ac.kr') {
+      const $login = cheerio.load(html);
+      if ($login('input[type="password"]').length > 0 || html.includes('login/index.php')) {
+        return NextResponse.json({ error: 'Login required to view this page', sourceUrl: parsed.toString(), title: listingTitle || null });
+      }
     }
     const $ = cheerio.load(html);
 
