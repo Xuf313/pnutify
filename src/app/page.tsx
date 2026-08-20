@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { format, isSameDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, getDay } from "date-fns"
-import { CalendarDays, Check, MapPin, MessageSquare, Scroll, Star, Globe, Monitor, GraduationCap, Sparkles, ExternalLink, X, ChevronLeft, ChevronRight, Eye, EyeOff, Bell, User, LogOut, Plus, Edit2, Trash2 } from "lucide-react"
+import { CalendarDays, Check, MapPin, MessageSquare, Scroll, Star, Globe, Monitor, GraduationCap, Sparkles, ExternalLink, X, ChevronLeft, ChevronRight, Eye, EyeOff, Bell, User, LogOut, LogIn, Plus, Edit2, Trash2 } from "lucide-react"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -105,14 +105,6 @@ export default function App() {
 
   useEffect(() => {
     setIsMounted(true);
-    
-    try {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-          Notification.requestPermission().catch(() => {});
-        }
-      }
-    } catch (e) { console.log("Notifications blocked"); }
 
     try {
       let initialCreds = { username: '', password: '' };
@@ -226,14 +218,6 @@ export default function App() {
   }
 
   const syncPlato = async (silent = false, credsToUse = platoCreds) => {
-    if (!silent) {
-      try {
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
-        }
-      } catch(e) {}
-    }
-    
     if (!credsToUse.username || !credsToUse.password) {
       if (!silent) alert("Enter PLATO credentials");
       return;
@@ -382,7 +366,7 @@ export default function App() {
             className="absolute bottom-0 left-0 right-0 px-6 z-50 bg-gradient-to-t from-background via-background/90 to-transparent pt-8"
             style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
           >
-            <div className="cozy-card bg-card p-2 flex items-center justify-between relative overflow-hidden mb-2">
+            <div className="cozy-card bg-card p-2 flex items-center justify-between relative overflow-hidden mb-2 rounded-3xl">
               <NavItem icon={<MessageSquare size={24} />} label="Notices" isActive={activeTab === "notices"} onClick={() => setActiveTab("notices")} />
               <NavItem icon={<CalendarDays size={24} />} label="Calendar" isActive={activeTab === "calendar"} onClick={() => setActiveTab("calendar")} />
               <NavItem icon={<Check size={24} strokeWidth={3} />} label="Tasks" isActive={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} />
@@ -578,9 +562,9 @@ function TodayPanel({ tasks, classes }: any) {
 
 function NavItem({ icon, label, isActive, onClick }: any) {
   return (
-    <button onClick={onClick} className={cn("flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 rounded-xl transition-all duration-300 relative z-10", isActive ? "bg-accent text-accent-foreground border-2 border-border shadow-[2px_2px_0px_var(--color-border)] -translate-y-1" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-2 border-transparent")}>
-      <div className={cn("transition-transform duration-300", isActive && "scale-110")}>{icon}</div>
-      <span className={cn("font-pixel text-xs tracking-wider font-bold", isActive ? "opacity-100" : "opacity-0 h-0 overflow-hidden")}>{label}</span>
+    <button onClick={onClick} className={cn("flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-2xl transition-all duration-300 relative z-10", isActive ? "bg-muted text-foreground border-2 border-border shadow-[2px_2px_0px_var(--color-border)]" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-2 border-transparent")}>
+      <div className={cn("transition-transform duration-300", isActive && "scale-110 text-primary")}>{icon}</div>
+      <span className={cn("font-pixel text-[10px] tracking-wider font-bold", isActive ? "opacity-100" : "opacity-0 h-0 overflow-hidden")}>{label}</span>
     </button>
   )
 }
@@ -844,20 +828,19 @@ function PushNotificationCard() {
   if (status === 'unsupported') return null
 
   return (
-    <div className="cozy-card bg-card p-5 mb-8 flex flex-col gap-3">
-      <div className="flex justify-between items-center">
-        <p className="font-pixel text-sm font-bold text-foreground flex items-center gap-2"><Bell size={16} className="text-primary"/> Push Notifications</p>
-        {status === 'on' && <span className="bg-primary/20 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/30">ON</span>}
-      </div>
+    <div className="cozy-card bg-card p-3 mb-6 flex items-center justify-between gap-3">
+      <p className="font-pixel text-xs font-bold text-foreground flex items-center gap-2 shrink-0">
+        <Bell size={14} className="text-primary"/> Push Notifications
+      </p>
       {status === 'denied' ? (
-        <p className="text-xs text-muted-foreground font-bold">Blocked — enable notifications for this app in iOS/browser settings first.</p>
+        <span className="text-[10px] text-muted-foreground font-bold text-right">Blocked in settings</span>
       ) : status === 'on' ? (
-        <button onClick={disable} disabled={busy} className="cozy-btn bg-muted hover:bg-muted/80 text-foreground font-bold py-2.5 transition-all text-xs font-pixel tracking-wide">
-          {busy ? 'Working...' : 'Turn Off'}
+        <button onClick={disable} disabled={busy} className="cozy-btn bg-muted hover:bg-muted/80 text-foreground font-bold px-3 py-1.5 transition-all text-[10px] font-pixel tracking-wide shrink-0">
+          {busy ? '...' : 'Turn Off'}
         </button>
       ) : (
-        <button onClick={enable} disabled={busy} className="cozy-btn bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2.5 transition-all text-xs font-pixel tracking-wide">
-          {busy ? 'Enabling...' : 'Enable Notifications'}
+        <button onClick={enable} disabled={busy} className="cozy-btn bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-3 py-1.5 transition-all text-[10px] font-pixel tracking-wide shrink-0">
+          {busy ? 'Enabling...' : 'Enable'}
         </button>
       )}
     </div>
@@ -873,28 +856,53 @@ function ProfileTab({ platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedI
       <PushNotificationCard />
 
       {isLoggedIn ? (
-        <div className="cozy-card bg-card p-5 mb-8 flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <p className="font-pixel text-sm font-bold text-foreground flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> PLATO Connected</p>
-            <span className="bg-primary/20 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/30">{platoCreds.username}</span>
+        <div className="cozy-card bg-card p-6 mb-8 flex flex-col items-center relative overflow-hidden">
+          <div className="absolute top-0 w-full h-24 bg-primary/20 border-b-2 border-border" />
+          <div className="w-24 h-24 rounded-full border-4 border-card bg-background shadow-[4px_4px_0px_var(--color-border)] relative z-10 flex items-center justify-center text-primary mt-8 mb-4">
+            <GraduationCap size={40} strokeWidth={2.5} />
           </div>
-          <button onClick={handleLogout} className="cozy-btn bg-muted hover:bg-muted/80 text-foreground font-bold py-2.5 transition-all text-xs font-pixel tracking-wide flex items-center justify-center gap-2">
-            <LogOut size={14} /> Disconnect / Logout
+          <h2 className="font-pixel text-2xl font-bold text-foreground">{platoCreds.username}</h2>
+          <p className="font-bold text-muted-foreground mb-6">PLATO Connected</p>
+
+          <div className="w-full space-y-3 mb-6">
+            <div className="bg-muted/50 p-3 rounded-lg flex items-center justify-between border-2 border-transparent">
+              <span className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest">Status</span>
+              <span className="font-bold text-foreground text-sm">Synced</span>
+            </div>
+            <div className="bg-muted/50 p-3 rounded-lg flex items-center justify-between border-2 border-transparent">
+              <span className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest">Classes</span>
+              <span className="font-bold text-foreground text-sm">{(classes || []).length} registered</span>
+            </div>
+          </div>
+
+          <button onClick={handleLogout} className="cozy-btn w-full py-3 bg-background border-2 border-border text-foreground font-pixel font-bold flex items-center justify-center gap-2 hover:bg-muted">
+            <LogOut size={18} /> Disconnect / Logout
           </button>
         </div>
       ) : (
-        <div className="cozy-card bg-card p-5 mb-8 flex flex-col gap-4">
-          <p className="font-pixel text-sm font-bold text-foreground flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> Sync PLATO Dashboard</p>
-          <div className="flex flex-col gap-3">
-            <input type="text" placeholder="Student ID" className="w-full bg-background border-2 border-border rounded-lg p-3 text-sm focus:outline-none focus:border-accent" value={platoCreds.username} onChange={e => setPlatoCreds({...platoCreds, username: e.target.value})} />
-            <div className="relative w-full">
-              <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-accent" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-            </div>
+        <div className="mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center border-2 border-border shadow-[4px_4px_0px_var(--color-border)] transform -rotate-3 mb-4">
+            <LogIn size={32} />
           </div>
-          <button onClick={syncPlato} disabled={isSyncing} className="cozy-btn bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 transition-all">
-            {isSyncing ? 'Scraping...' : 'Fetch Deadlines & Classes'}
-          </button>
+          <h2 className="font-pixel text-3xl font-bold text-foreground">Welcome back!</h2>
+          <p className="font-bold text-muted-foreground mb-6">Sign in to sync your schedule.</p>
+
+          <div className="cozy-card bg-card p-6 flex flex-col gap-4">
+            <div>
+              <label className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1 block">Student ID</label>
+              <input type="text" placeholder="e.g. 202412345" className="w-full bg-background border-2 border-border rounded-lg p-3 text-sm focus:outline-none focus:border-primary" value={platoCreds.username} onChange={e => setPlatoCreds({...platoCreds, username: e.target.value})} />
+            </div>
+            <div>
+              <label className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1 block">Password</label>
+              <div className="relative w-full">
+                <input type={showPassword ? "text" : "password"} className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-primary" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </div>
+            </div>
+            <button onClick={syncPlato} disabled={isSyncing} className="cozy-btn w-full py-3 bg-primary border-2 border-border text-primary-foreground shadow-[4px_4px_0px_var(--color-border)] font-pixel font-bold flex items-center justify-center gap-2 hover:bg-primary/90">
+              {isSyncing ? 'Scraping...' : 'Login'}
+            </button>
+          </div>
         </div>
       )}
 
