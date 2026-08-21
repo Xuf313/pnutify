@@ -623,7 +623,7 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
             <Star size={16} fill="currentColor" />
             <h3 className="font-pixel text-lg font-bold">Unread</h3>
           </div>
-          <NotificationToggle category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
+          <NotificationToggle key={category} category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
         </div>
 
         {isLoading ? (
@@ -718,7 +718,15 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
 
 function CategoryTab({ icon, label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={cn("flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all font-pixel text-sm font-bold border-2", active ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-1" : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted")}>
+    <button 
+      onClick={onClick} 
+      className={cn(
+        "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-all font-pixel text-sm font-bold border-2", 
+        active 
+          ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-1" 
+          : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted"
+      )}
+    >
       {icon} {label}
     </button>
   )
@@ -793,37 +801,68 @@ function CalendarTab({ tasks, classes }: any) {
   )
 }
 
+const notificationCache: Record<string, boolean> = {}
+
 function NotificationToggle({ category, label }: { category: string; label: string }) {
-  const [enabled, setEnabled] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [enabled, setEnabled] = useState(() => Boolean(notificationCache[category]))
+  const [busy, setBusy] = useState(() => notificationCache[category] === undefined)
   const [supported, setSupported] = useState(true)
 
   useEffect(() => {
+    let isMounted = true;
+
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setSupported(false)
+      if (isMounted) setSupported(false)
       return
     }
+
+    if (notificationCache[category] === undefined) {
+       setBusy(true);
+    }
+
     (async () => {
       try {
         const reg = await navigator.serviceWorker.getRegistration()
         const sub = reg ? await reg.pushManager.getSubscription() : null
-        if (!sub) { setEnabled(false); return }
+        
+        if (!sub) { 
+          notificationCache[category] = false;
+          if (isMounted) {
+            setEnabled(false); 
+            setBusy(false);
+          }
+          return; 
+        }
+        
         const res = await fetch('/api/push/categories')
         const data = await res.json()
-        setEnabled(Boolean(data?.categories?.[category]))
+        
+        if (data?.categories) {
+          Object.assign(notificationCache, data.categories)
+        }
+
+        if (isMounted) {
+          setEnabled(Boolean(data?.categories?.[category]))
+        }
       } catch {
-        setEnabled(false)
+        if (isMounted) setEnabled(false)
+      } finally {
+        if (isMounted) setBusy(false)
       }
     })()
+
+    return () => { isMounted = false; }
   }, [category])
 
   const setCategory = async (value: boolean) => {
+    setEnabled(value)
+    notificationCache[category] = value
+    
     await fetch('/api/push/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ category, enabled: value }),
     })
-    setEnabled(value)
   }
 
   const toggle = async () => {
@@ -849,6 +888,7 @@ function NotificationToggle({ category, label }: { category: string; label: stri
       await setCategory(true)
     } catch (e) {
       console.error('Notification toggle failed', e)
+      setEnabled(Boolean(notificationCache[category])) 
     } finally {
       setBusy(false)
     }
@@ -857,8 +897,16 @@ function NotificationToggle({ category, label }: { category: string; label: stri
   if (!supported) return null
 
   return (
-    <button onClick={toggle} disabled={busy} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-border font-pixel text-[10px] font-bold shrink-0 transition-all", enabled ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
-      <Bell size={12} /> {label}: {enabled ? "On" : "Off"}
+    <button 
+      onClick={toggle} 
+      disabled={busy} 
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-border font-pixel text-[10px] font-bold shrink-0 transition-all", 
+        enabled && !busy ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
+        busy ? "opacity-60 cursor-not-allowed" : "" 
+      )}
+    >
+      <Bell size={12} /> {label}: {busy ? "..." : enabled ? "On" : "Off"}
     </button>
   )
 }
@@ -910,7 +958,7 @@ function ProfileTab({ platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedI
               <label className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1 block">Password</label>
               <div className="relative w-full">
                 <input type={showPassword ? "text" : "password"} className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-primary" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <Eye size={18} /> : <EyeOff size={18} />}</button>
               </div>
             </div>
             <button onClick={syncPlato} disabled={isSyncing} className="cozy-btn w-full py-3 bg-primary border-2 border-border text-primary-foreground shadow-[4px_4px_0px_var(--color-border)] font-pixel font-bold flex items-center justify-center gap-2 hover:bg-primary/90">
@@ -998,10 +1046,10 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
 
       <div className="flex gap-2 mb-6 items-center justify-between">
         <div className="flex gap-2">
-          <CategoryTab icon={<User size={16} />} label="Own" active={filter === "own"} onClick={() => setFilter("own")} />
+          <CategoryTab icon={<User size={16} />} label="Mine" active={filter === "own"} onClick={() => setFilter("own")} />
           <CategoryTab icon={<GraduationCap size={16} />} label="PLATO" active={filter === "plato"} onClick={() => setFilter("plato")} />
         </div>
-        <NotificationToggle category="tasks" label="Deadlines" />
+        <NotificationToggle key="tasks" category="tasks" label="Deadlines" />
       </div>
 
       <div className="flex flex-col gap-6">
