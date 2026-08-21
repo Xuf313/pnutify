@@ -795,26 +795,40 @@ function CalendarTab({ tasks, classes }: any) {
 
 function NotificationToggle({ category, label }: { category: string; label: string }) {
   const [enabled, setEnabled] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(true)
   const [supported, setSupported] = useState(true)
 
   useEffect(() => {
+    let isMounted = true;
+    setBusy(true); 
+
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setSupported(false)
+      if (isMounted) setSupported(false)
       return
     }
+    
     (async () => {
       try {
         const reg = await navigator.serviceWorker.getRegistration()
         const sub = reg ? await reg.pushManager.getSubscription() : null
-        if (!sub) { setEnabled(false); return }
+        
+        if (!sub) { 
+          if (isMounted) setEnabled(false); 
+          return; 
+        }
+        
         const res = await fetch('/api/push/categories')
         const data = await res.json()
-        setEnabled(Boolean(data?.categories?.[category]))
+        
+        if (isMounted) setEnabled(Boolean(data?.categories?.[category]))
       } catch {
-        setEnabled(false)
+        if (isMounted) setEnabled(false)
+      } finally {
+        if (isMounted) setBusy(false)
       }
     })()
+
+    return () => { isMounted = false; }
   }, [category])
 
   const setCategory = async (value: boolean) => {
@@ -857,8 +871,16 @@ function NotificationToggle({ category, label }: { category: string; label: stri
   if (!supported) return null
 
   return (
-    <button onClick={toggle} disabled={busy} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-border font-pixel text-[10px] font-bold shrink-0 transition-all", enabled ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
-      <Bell size={12} /> {label}: {enabled ? "On" : "Off"}
+    <button 
+      onClick={toggle} 
+      disabled={busy} 
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-border font-pixel text-[10px] font-bold shrink-0 transition-all", 
+        enabled && !busy ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
+        busy ? "opacity-60 cursor-not-allowed" : "" 
+      )}
+    >
+      <Bell size={12} /> {label}: {busy ? "..." : enabled ? "On" : "Off"}
     </button>
   )
 }

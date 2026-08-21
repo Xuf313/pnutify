@@ -19,14 +19,13 @@ const isFromAugustOnwards = (dateStr: string) => {
 };
 
 const parseDate = (dateStr: string): Date | null => {
-  const d = new Date(dateStr.replace(/\./g, '-'));
+  const clean = dateStr.replace(/\./g, '-');
+  const d = new Date(clean);
   return isNaN(d.getTime()) ? null : d;
 };
 
 const cleanTitle = (t: string) => t.replace(/새글/g, '').replace(/\s+/g, ' ').trim();
 
-// Derive a stable ID from the article URL (survives re-scrapes) instead of a
-// per-request counter.
 const extractId = (url: string): string | null => {
   const direct = url.match(/\/(\d+)\/(\d+)\/artclView\.do/);
   if (direct) return direct[2];
@@ -45,24 +44,45 @@ function scrapePage($: cheerio.CheerioAPI, source: 'cse' | 'international', orig
   const notices: ScrapedNotice[] = [];
   let idCounter = 1;
   let oldestDate: Date | null = null;
-  const rows = $('table tbody tr');
+  
+  const rows = $('table tbody tr, .b-list tbody tr, .board-list tbody tr');
 
   rows.each((_, el) => {
     const $row = $(el);
-    const titleEl = $row.find('td.title a, td.td-subject a, td a').first();
-
+    
+    // Extract Title & URL
+    const titleEl = $row.find('td.title a, td.td-subject a, td.b-td-left a, td a, .b-subject a').first();
     const possibleTitleAttr = titleEl.attr('title') || $row.find('[title]').attr('title') || '';
     let rawTitle = titleEl.text() || $row.find('td').eq(1).text();
     if (possibleTitleAttr && possibleTitleAttr.length > rawTitle.length) rawTitle = possibleTitleAttr;
 
     const title = cleanTitle(rawTitle);
-    const href = titleEl.attr('href');
+    const href = titleEl.attr('href') || '';
     const url = href ? (href.startsWith('http') ? href : `${origin}${href}`) : '';
-    const dateText = $row.find('td.date, td.td-date').text().trim() || $row.find('td').eq(3).text().trim();
+    
+    // Extract Date
+    let dateText = $row.find('td.date, td.td-date, td.b-date, .b-date').text().trim();
+    if (!dateText) {
+       dateText = $row.find('td').eq(3).text().trim();
+    }
+    
     if (!title || !dateText) return;
 
+    // VERY STRICT Pinned Check: 
+    // If the first column isn't perfectly numerical, it is considered pinned.
+    const firstCol = $row.find('td').first();
+    const numText = firstCol.text().replace(/\s+/g, '');
+    const hasIcon = firstCol.find('img, .b-notice').length > 0;
+    const isPinned = $row.hasClass('b-top-box') || $row.hasClass('notice') || hasIcon || !/^\d+$/.test(numText);
+
     const parsed = parseDate(dateText);
-    if (parsed && (!oldestDate || parsed < oldestDate)) oldestDate = parsed;
+    
+    // Crucial: Only NON-pinned dates update the oldestDate tracking variable!
+    if (parsed && !isPinned) {
+      if (!oldestDate || parsed < oldestDate) {
+        oldestDate = parsed;
+      }
+    }
 
     if (isFromAugustOnwards(dateText)) {
       const stableId = url ? extractId(url) : null;
@@ -80,28 +100,47 @@ function scrapePage($: cheerio.CheerioAPI, source: 'cse' | 'international', orig
   return { notices, oldestDate, rowCount: rows.length };
 }
 
-// Instead of guessing the pagination query-param convention (tried ?page=N,
-// wrong), follow the actual "next page" link the listing page itself
-// provides — whatever convention it uses, this always matches it.
 function findNextPageUrl($: cheerio.CheerioAPI, currentPage: number, base: string): string | null {
-  const candidates = $('.paging a, .board-paging a, .pagination a, .bd-pager a, nav[class*="paging"] a, [class*="paginate"] a');
   const wantText = String(currentPage + 1);
+  const allLinks = $('a').toArray();
+  
+  // 1. Direct text match
+  for (const el of allLinks) {
+    const $el = $(el).clone();
+    
+    // Ignore links buried inside actual article content text
+    if ($(el).closest('.b-content-box, .artcl-content').length > 0) continue;
 
-  let bestHref: string | null = null;
-  candidates.each((_, el) => {
-    const text = $(el).text().trim();
-    if (text === wantText) bestHref = $(el).attr('href') || bestHref;
-  });
-  if (bestHref) return new URL(bestHref, base).toString();
+    $el.find('.hide, .blind, .sr-only').remove();
+    const text = $el.text().replace(/\s+/g, '');
+    
+    // Accepts '2' or '[2]'
+    if (text === wantText || text === `[${wantText}]`) {
+      const href = $(el).attr('href');
+      if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+        return new URL(href, base).toString();
+      }
+    }
+  }
 
-  // No numbered link for the next page — try a "다음"/next-style control.
-  let nextHref: string | null = null;
-  candidates.each((_, el) => {
-    const text = $(el).text().trim();
-    const label = ($(el).attr('title') || '') + ' ' + ($(el).attr('aria-label') || '');
-    if (/다음|next/i.test(text) || /다음|next/i.test(label)) nextHref = $(el).attr('href') || nextHref;
-  });
-  return nextHref ? new URL(nextHref, base).toString() : null;
+  // 2. Button block fallback (e.g., 'Next')
+  for (const el of allLinks) {
+    const $el = $(el);
+    if ($el.closest('[class*="paging"], [class*="paginate"], .pagination, .b-paging-wrap').length > 0) {
+      const text = $el.text().trim().toLowerCase();
+      const title = ($el.attr('title') || '').toLowerCase();
+      const aria = ($el.attr('aria-label') || '').toLowerCase();
+      
+      if (text.includes('다음') || text.includes('next') || title.includes('다음') || aria.includes('다음')) {
+        const href = $el.attr('href');
+        if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+          return new URL(href, base).toString();
+        }
+      }
+    }
+  }
+  
+  return null;
 }
 
 async function scrapeBoardPaginated(baseUrl: string, source: 'cse' | 'international', origin: string, idPrefix: string): Promise<ScrapedNotice[]> {
@@ -122,14 +161,22 @@ async function scrapeBoardPaginated(baseUrl: string, source: 'cse' | 'internatio
     const { notices, oldestDate, rowCount } = scrapePage($, source, origin, idPrefix, page);
     all.push(...notices);
 
-    // Stop once the board runs out of rows, or once we've scrolled back
-    // past the cutoff date (older pages only get older from here).
+    // Stop if table was completely empty
     if (rowCount === 0) break;
+    
+    // Stop if normal notices successfully reached past the cut-off date limits
     if (oldestDate && oldestDate < CUTOFF) break;
 
     const next = findNextPageUrl($, page, pageUrl);
-    if (!next) break;
-    pageUrl = next;
+    if (next) {
+      pageUrl = next;
+    } else {
+      // 3. Ultimate Fallback: If pagination links use JavaScript that Cheerio cannot click,
+      // force navigation natively by injecting `page` params into the target board.
+      const u = new URL(pageUrl);
+      u.searchParams.set('page', String(page + 1));
+      pageUrl = u.toString();
+    }
   }
 
   return all;
