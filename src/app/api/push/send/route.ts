@@ -27,8 +27,18 @@ export async function GET(request: Request) {
 
   const hasVapidKeys = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
+  let notices;
   try {
-    const notices = await scrapeAllNotices();
+    notices = await Promise.race([
+      scrapeAllNotices(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Scrape timed out after 20s')), 20000)),
+    ]);
+  } catch (err) {
+    console.error('[push/send] scrape failed:', err);
+    return NextResponse.json({ error: 'Scrape failed', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
+
+  try {
     const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
     const seenIds = new Set(seenIdsArr);
     const newNotices = notices.filter((n) => !seenIds.has(n.id));
@@ -60,6 +70,7 @@ export async function GET(request: Request) {
             typeof err === 'object' && err !== null && 'statusCode' in err
               ? (err as { statusCode?: number }).statusCode
               : undefined;
+          console.error('[push/send] webpush.sendNotification failed:', err);
           if (statusCode === 404 || statusCode === 410) {
             await redis.del(SUB_KEY);
           }
@@ -70,8 +81,9 @@ export async function GET(request: Request) {
     if (hasRedisEnv) {
       await redis.set(SEEN_KEY, notices.map((n) => n.id));
     }
-    return NextResponse.json({ ok: true, newCount: isFirstRun ? 0 : newNotices.length, firstRun: isFirstRun });
-  } catch {
-    return NextResponse.json({ error: 'Failed to check notices' }, { status: 500 });
+    return NextResponse.json({ ok: true, noticeCount: notices.length, newCount: isFirstRun ? 0 : newNotices.length, firstRun: isFirstRun });
+  } catch (err) {
+    console.error('[push/send] redis/push stage failed:', err);
+    return NextResponse.json({ error: 'Redis or push stage failed', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
