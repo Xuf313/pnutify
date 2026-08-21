@@ -3,6 +3,9 @@ import { Redis } from '@upstash/redis';
 import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
 import { scrapeAllNotices } from '@/lib/scrapeNotices';
+import { loginAndScrapePlato } from '@/lib/scrapePlato';
+
+export const maxDuration = 60;
 
 const redis = Redis.fromEnv();
 
@@ -11,6 +14,8 @@ const SEEN_KEY = 'push:seen-ids';
 const CATEGORIES_KEY = 'push:categories';
 const TASKS_KEY = 'tasks:list';
 const NOTIFIED_DEADLINES_KEY = 'push:notified-deadlines';
+const PLATO_CREDS_KEY = 'plato:credentials';
+const PLATO_SEEN_KEY = 'push:plato-seen-ids';
 const DEFAULT_CATEGORIES: Record<string, boolean> = { international: true, cse: true, classes: true, tasks: true };
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
@@ -62,8 +67,7 @@ export async function GET(request: Request) {
     const subscription = hasRedisEnv ? await redis.get<unknown>(SUB_KEY) : null;
     const canPush = isPushSubscription(subscription) && hasVapidKeys;
 
-    // ---- New notices (CSE / International — PLATO isn't checked here since
-    // it needs a logged-in session this cron doesn't have) ----
+    // ---- New notices (CSE / International) ----
     const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
     const seenIds = new Set(seenIdsArr);
     const newNotices = notices.filter((n) => !seenIds.has(n.id));
@@ -116,12 +120,54 @@ export async function GET(request: Request) {
       }
     }
 
+    // ---- PLATO announcements (needs a login session, so only runs if
+    // credentials were saved server-side and this toggle is on) ----
+    let platoNewCount = 0;
+    if (hasRedisEnv && categories.classes) {
+      try {
+        const creds = await redis.get<{ username: string; password: string }>(PLATO_CREDS_KEY);
+        if (creds?.username && creds?.password) {
+          const platoResult = await Promise.race([
+            loginAndScrapePlato(creds.username, creds.password),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PLATO login timed out after 20s')), 20000)),
+          ]);
+          if (platoResult.ok) {
+            const platoSeenArr = toStringArray(await redis.get<unknown>(PLATO_SEEN_KEY));
+            const platoSeen = new Set(platoSeenArr);
+            const newPlato = platoResult.announcements.filter((a: any) => !platoSeen.has(a.id));
+            const isPlatoFirstRun = platoSeenArr.length === 0;
+            platoNewCount = isPlatoFirstRun ? 0 : newPlato.length;
+
+            if (!isPlatoFirstRun && newPlato.length > 0 && canPush) {
+              const body =
+                newPlato.length === 1
+                  ? newPlato[0].title
+                  : `${newPlato.length} new PLATO announcements — including "${newPlato[0].title}"`;
+              try {
+                await sendPush(subscription as PushSubscription, { title: 'New PLATO Announcement', body, url: newPlato[0].url || '/' });
+              } catch (err: unknown) {
+                const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
+                console.error('[push/send] plato push failed:', err);
+                if (statusCode === 404 || statusCode === 410) await redis.del(SUB_KEY);
+              }
+            }
+            await redis.set(PLATO_SEEN_KEY, platoResult.announcements.map((a: any) => a.id));
+          } else {
+            console.error('[push/send] plato login failed:', platoResult.error);
+          }
+        }
+      } catch (err) {
+        console.error('[push/send] plato check failed:', err);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       noticeCount: notices.length,
       newCount: isFirstRun ? 0 : notifiableNotices.length,
       firstRun: isFirstRun,
       dueTaskCount: dueCount,
+      platoNewCount,
       categories,
     });
   } catch (err) {
