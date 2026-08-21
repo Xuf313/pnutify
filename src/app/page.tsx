@@ -623,7 +623,7 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
             <Star size={16} fill="currentColor" />
             <h3 className="font-pixel text-lg font-bold">Unread</h3>
           </div>
-          <NotificationToggle category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
+          <NotificationToggle key={category} category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
         </div>
 
         {isLoading ? (
@@ -1049,7 +1049,7 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
           <CategoryTab icon={<User size={16} />} label="Own" active={filter === "own"} onClick={() => setFilter("own")} />
           <CategoryTab icon={<GraduationCap size={16} />} label="PLATO" active={filter === "plato"} onClick={() => setFilter("plato")} />
         </div>
-        <NotificationToggle category="tasks" label="Deadlines" />
+        <NotificationToggle key="tasks" category="tasks" label="Deadlines" />
       </div>
 
       <div className="flex flex-col gap-6">
