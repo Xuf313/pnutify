@@ -35,6 +35,7 @@ async function sendPush(subscription: PushSubscription, payload: { title: string
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get('secret') || request.headers.get('x-cron-secret');
+  
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -48,18 +49,8 @@ export async function GET(request: Request) {
     );
   }
 
-  let notices;
   try {
-    notices = await Promise.race([
-      scrapeAllNotices(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Scrape timed out after 20s')), 20000)),
-    ]);
-  } catch (err) {
-    console.error('[push/send] scrape failed:', err);
-    return NextResponse.json({ error: 'Scrape failed', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
-  }
-
-  try {
+    // 1. Fetch categories and subscription first
     const categories = hasRedisEnv
       ? { ...DEFAULT_CATEGORIES, ...((await redis.get<Record<string, boolean>>(CATEGORIES_KEY)) || {}) }
       : DEFAULT_CATEGORIES;
@@ -67,51 +58,47 @@ export async function GET(request: Request) {
     const subscription = hasRedisEnv ? await redis.get<unknown>(SUB_KEY) : null;
     const canPush = isPushSubscription(subscription) && hasVapidKeys;
 
-    // ---- New notices (CSE / International) ----
-    const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
-    const seenIds = new Set(seenIdsArr);
-    const newNotices = notices.filter((n) => !seenIds.has(n.id));
-    const isFirstRun = seenIdsArr.length === 0;
-    const notifiableNotices = newNotices.filter((n) => categories[n.source]);
-
-    if (!isFirstRun && notifiableNotices.length > 0 && canPush) {
-      const body =
-        notifiableNotices.length === 1
-          ? notifiableNotices[0].title
-          : `${notifiableNotices.length} new notices — including "${notifiableNotices[0].title}"`;
-      try {
-        await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body, url: notifiableNotices[0].url || '/' });
-      } catch (err: unknown) {
-        const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
-        console.error('[push/send] notice push failed:', err);
-        if (statusCode === 404 || statusCode === 410) await redis.del(SUB_KEY);
-      }
-    }
-    if (hasRedisEnv) await redis.set(SEEN_KEY, notices.map((n) => n.id));
-
-    // ---- Task deadlines ----
+    // ---- 2. Task deadlines (Processed first so scraper timeouts don't block them) ----
     let dueCount = 0;
     if (hasRedisEnv && categories.tasks) {
       const tasks = (await redis.get<any[]>(TASKS_KEY)) || [];
       const notifiedDeadlines = new Set(toStringArray(await redis.get<unknown>(NOTIFIED_DEADLINES_KEY)));
       const now = Date.now();
+      
+      // Remind the user if a task is due within the next 24 hours
+      const REMINDER_WINDOW = 24 * 60 * 60 * 1000; 
+
       const dueTasks = tasks.filter((t) => {
         const due = new Date(t.dueDate).getTime();
-        return !isNaN(due) && due <= now && !notifiedDeadlines.has(String(t.id));
+        return !isNaN(due) && due <= (now + REMINDER_WINDOW) && !notifiedDeadlines.has(String(t.id));
       });
+      
       dueCount = dueTasks.length;
 
       if (dueTasks.length > 0 && canPush) {
+        const firstTask = dueTasks[0];
+        const dueTime = new Date(firstTask.dueDate).getTime();
+        const hoursLeft = Math.floor((dueTime - now) / (1000 * 60 * 60));
+        
+        let timeString = 'soon';
+        if (hoursLeft > 0) {
+          timeString = `in about ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
+        } else if (hoursLeft <= 0) {
+          timeString = 'now (overdue)';
+        }
+
         const body =
           dueTasks.length === 1
-            ? `"${dueTasks[0].title}" is due now`
-            : `${dueTasks.length} tasks are due — including "${dueTasks[0].title}"`;
+            ? `Reminder: "${firstTask.title}" is due ${timeString}.`
+            : `${dueTasks.length} upcoming tasks — including "${firstTask.title}".`;
+
         try {
-          await sendPush(subscription as PushSubscription, { title: 'Task Deadline', body, url: '/' });
+          await sendPush(subscription as PushSubscription, { title: 'Upcoming Deadline', body, url: '/' });
         } catch (err: unknown) {
           const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
           console.error('[push/send] deadline push failed:', err);
-          if (statusCode === 404 || statusCode === 410) await redis.del(SUB_KEY);
+          // Added 403 to automatically clear broken subscriptions
+          if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
         }
       }
       if (dueTasks.length > 0) {
@@ -120,8 +107,41 @@ export async function GET(request: Request) {
       }
     }
 
-    // ---- PLATO announcements (needs a login session, so only runs if
-    // credentials were saved server-side and this toggle is on) ----
+    // ---- 3. New notices (CSE / International) ----
+    let notices: any[] = [];
+    let notifiableNotices: any[] = [];
+    let isFirstRun = false;
+    
+    try {
+      notices = await Promise.race([
+        scrapeAllNotices(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Scrape timed out after 20s')), 20000)),
+      ]);
+
+      const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
+      const seenIds = new Set(seenIdsArr);
+      const newNotices = notices.filter((n) => !seenIds.has(n.id));
+      isFirstRun = seenIdsArr.length === 0;
+      notifiableNotices = newNotices.filter((n) => categories[n.source]);
+
+      if (!isFirstRun && notifiableNotices.length > 0 && canPush) {
+        const body =
+          notifiableNotices.length === 1
+            ? notifiableNotices[0].title
+            : `${notifiableNotices.length} new notices — including "${notifiableNotices[0].title}"`;
+        try {
+          await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body, url: notifiableNotices[0].url || '/' });
+        } catch (err: unknown) {
+          const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
+          if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
+        }
+      }
+      if (hasRedisEnv) await redis.set(SEEN_KEY, notices.map((n) => n.id));
+    } catch (err) {
+      console.error('[push/send] scrape failed but continuing execution:', err);
+    }
+
+    // ---- 4. PLATO announcements ----
     let platoNewCount = 0;
     if (hasRedisEnv && categories.classes) {
       try {
@@ -147,8 +167,7 @@ export async function GET(request: Request) {
                 await sendPush(subscription as PushSubscription, { title: 'New PLATO Announcement', body, url: newPlato[0].url || '/' });
               } catch (err: unknown) {
                 const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
-                console.error('[push/send] plato push failed:', err);
-                if (statusCode === 404 || statusCode === 410) await redis.del(SUB_KEY);
+                if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
               }
             }
             await redis.set(PLATO_SEEN_KEY, platoResult.announcements.map((a: any) => a.id));
