@@ -718,7 +718,15 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
 
 function CategoryTab({ icon, label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={cn("flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all font-pixel text-sm font-bold border-2", active ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-1" : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted")}>
+    <button 
+      onClick={onClick} 
+      className={cn(
+        "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl transition-all font-pixel text-sm font-bold border-2", 
+        active 
+          ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-1" 
+          : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted"
+      )}
+    >
       {icon} {label}
     </button>
   )
@@ -793,34 +801,49 @@ function CalendarTab({ tasks, classes }: any) {
   )
 }
 
+const notificationCache: Record<string, boolean> = {}
+
 function NotificationToggle({ category, label }: { category: string; label: string }) {
-  const [enabled, setEnabled] = useState(false)
-  const [busy, setBusy] = useState(true)
+  const [enabled, setEnabled] = useState(() => Boolean(notificationCache[category]))
+  const [busy, setBusy] = useState(() => notificationCache[category] === undefined)
   const [supported, setSupported] = useState(true)
 
   useEffect(() => {
     let isMounted = true;
-    setBusy(true); 
 
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       if (isMounted) setSupported(false)
       return
     }
-    
+
+    if (notificationCache[category] === undefined) {
+       setBusy(true);
+    }
+
     (async () => {
       try {
         const reg = await navigator.serviceWorker.getRegistration()
         const sub = reg ? await reg.pushManager.getSubscription() : null
         
         if (!sub) { 
-          if (isMounted) setEnabled(false); 
+          notificationCache[category] = false;
+          if (isMounted) {
+            setEnabled(false); 
+            setBusy(false);
+          }
           return; 
         }
         
         const res = await fetch('/api/push/categories')
         const data = await res.json()
         
-        if (isMounted) setEnabled(Boolean(data?.categories?.[category]))
+        if (data?.categories) {
+          Object.assign(notificationCache, data.categories)
+        }
+
+        if (isMounted) {
+          setEnabled(Boolean(data?.categories?.[category]))
+        }
       } catch {
         if (isMounted) setEnabled(false)
       } finally {
@@ -832,12 +855,14 @@ function NotificationToggle({ category, label }: { category: string; label: stri
   }, [category])
 
   const setCategory = async (value: boolean) => {
+    setEnabled(value)
+    notificationCache[category] = value
+    
     await fetch('/api/push/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ category, enabled: value }),
     })
-    setEnabled(value)
   }
 
   const toggle = async () => {
@@ -863,6 +888,7 @@ function NotificationToggle({ category, label }: { category: string; label: stri
       await setCategory(true)
     } catch (e) {
       console.error('Notification toggle failed', e)
+      setEnabled(Boolean(notificationCache[category])) 
     } finally {
       setBusy(false)
     }
