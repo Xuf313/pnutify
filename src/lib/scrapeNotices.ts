@@ -80,11 +80,35 @@ function scrapePage($: cheerio.CheerioAPI, source: 'cse' | 'international', orig
   return { notices, oldestDate, rowCount: rows.length };
 }
 
+// Instead of guessing the pagination query-param convention (tried ?page=N,
+// wrong), follow the actual "next page" link the listing page itself
+// provides — whatever convention it uses, this always matches it.
+function findNextPageUrl($: cheerio.CheerioAPI, currentPage: number, base: string): string | null {
+  const candidates = $('.paging a, .board-paging a, .pagination a, .bd-pager a, nav[class*="paging"] a, [class*="paginate"] a');
+  const wantText = String(currentPage + 1);
+
+  let bestHref: string | null = null;
+  candidates.each((_, el) => {
+    const text = $(el).text().trim();
+    if (text === wantText) bestHref = $(el).attr('href') || bestHref;
+  });
+  if (bestHref) return new URL(bestHref, base).toString();
+
+  // No numbered link for the next page — try a "다음"/next-style control.
+  let nextHref: string | null = null;
+  candidates.each((_, el) => {
+    const text = $(el).text().trim();
+    const label = ($(el).attr('title') || '') + ' ' + ($(el).attr('aria-label') || '');
+    if (/다음|next/i.test(text) || /다음|next/i.test(label)) nextHref = $(el).attr('href') || nextHref;
+  });
+  return nextHref ? new URL(nextHref, base).toString() : null;
+}
+
 async function scrapeBoardPaginated(baseUrl: string, source: 'cse' | 'international', origin: string, idPrefix: string): Promise<ScrapedNotice[]> {
   const all: ScrapedNotice[] = [];
+  let pageUrl = baseUrl;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const pageUrl = page === 1 ? baseUrl : `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}page=${page}`;
     let html: string;
     try {
       const res = await fetch(pageUrl, { next: { revalidate: 300 } });
@@ -102,6 +126,10 @@ async function scrapeBoardPaginated(baseUrl: string, source: 'cse' | 'internatio
     // past the cutoff date (older pages only get older from here).
     if (rowCount === 0) break;
     if (oldestDate && oldestDate < CUTOFF) break;
+
+    const next = findNextPageUrl($, page, pageUrl);
+    if (!next) break;
+    pageUrl = next;
   }
 
   return all;

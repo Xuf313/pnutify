@@ -185,6 +185,18 @@ export default function App() {
     }
   }, [platoCreds, isLoggedIn, tasks, classes, notices, isMounted]);
 
+  useEffect(() => {
+    if (!isMounted) return;
+    const t = setTimeout(() => {
+      fetch('/api/tasks/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks }),
+      }).catch(() => {});
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [tasks, isMounted]);
+
   const noticesRef = useRef<any[]>([]);
   useEffect(() => { noticesRef.current = notices; }, [notices]);
 
@@ -300,6 +312,7 @@ export default function App() {
     setClasses([]); 
     setTasks(prev => (prev || []).filter(t => t.source === 'own')); 
     setNotices((notices || []).filter(n => n.source !== 'classes'));
+    fetch('/api/plato', { method: 'DELETE' }).catch(() => {});
     alert("Logged out successfully.");
   }
 
@@ -317,14 +330,16 @@ export default function App() {
     setTasks((tasks || []).map((t) => t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending" } : t))
   }
 
-  const addTask = (title: string, course: string, dueDateStr?: string) => {
+  const addTask = (title: string, course: string, dueDateStr?: string, dueTimeStr?: string) => {
     if (!title.trim()) return;
-    const dueDate = dueDateStr ? new Date(dueDateStr) : new Date(Date.now() + 86400000 * 2);
+    const timePart = dueTimeStr || "23:59";
+    const dueDate = dueDateStr ? new Date(`${dueDateStr}T${timePart}`) : new Date(Date.now() + 86400000 * 2);
     setTasks([{ id: `own_${Date.now()}`, title, course: course || "General", dueDate, status: "pending", source: "own" }, ...(tasks || [])]);
   }
 
-  const editTask = (id: string | number, newTitle: string, newCourse: string, newDateStr: string) => {
-    setTasks((tasks || []).map(t => t.id === id ? { ...t, title: newTitle, course: newCourse || "General", dueDate: new Date(newDateStr) } : t));
+  const editTask = (id: string | number, newTitle: string, newCourse: string, newDateStr: string, newTimeStr?: string) => {
+    const timePart = newTimeStr || "23:59";
+    setTasks((tasks || []).map(t => t.id === id ? { ...t, title: newTitle, course: newCourse || "General", dueDate: new Date(`${newDateStr}T${timePart}`) } : t));
   }
 
   const deleteTask = (id: string | number) => {
@@ -608,6 +623,7 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
             <Star size={16} fill="currentColor" />
             <h3 className="font-pixel text-lg font-bold">Unread</h3>
           </div>
+          <NotificationToggle category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
         </div>
 
         {isLoading ? (
@@ -777,86 +793,73 @@ function CalendarTab({ tasks, classes }: any) {
   )
 }
 
-function PushNotificationCard() {
-  const [status, setStatus] = useState<'unsupported' | 'checking' | 'off' | 'on' | 'denied'>('checking')
+function NotificationToggle({ category, label }: { category: string; label: string }) {
+  const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [supported, setSupported] = useState(true)
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setStatus('unsupported')
+      setSupported(false)
       return
     }
-    if (Notification.permission === 'denied') { setStatus('denied'); return }
-    navigator.serviceWorker.getRegistration()
-      .then(async (reg) => {
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration()
         const sub = reg ? await reg.pushManager.getSubscription() : null
-        setStatus(sub ? 'on' : 'off')
-      })
-      .catch(() => setStatus('off'))
-  }, [])
-
-  const enable = async () => {
-    setBusy(true)
-    try {
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') { setStatus('denied'); return }
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-      if (!vapidKey) { alert("Push isn't configured yet."); return }
-      const reg = await navigator.serviceWorker.register('/sw.js')
-      await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      })
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sub),
-      })
-      setStatus('on')
-    } catch (e) {
-      console.error('Push subscribe failed', e)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const disable = async () => {
-    setBusy(true)
-    try {
-      const reg = await navigator.serviceWorker.getRegistration()
-      const sub = reg ? await reg.pushManager.getSubscription() : null
-      if (sub) {
-        await sub.unsubscribe()
-        await fetch('/api/push/subscribe', { method: 'DELETE' })
+        if (!sub) { setEnabled(false); return }
+        const res = await fetch('/api/push/categories')
+        const data = await res.json()
+        setEnabled(Boolean(data?.categories?.[category]))
+      } catch {
+        setEnabled(false)
       }
-      setStatus('off')
+    })()
+  }, [category])
+
+  const setCategory = async (value: boolean) => {
+    await fetch('/api/push/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, enabled: value }),
+    })
+    setEnabled(value)
+  }
+
+  const toggle = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (enabled) {
+        await setCategory(false)
+        return
+      }
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+      if (permission !== 'granted') return
+      let reg = await navigator.serviceWorker.getRegistration()
+      if (!reg) reg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      let sub = await reg.pushManager.getSubscription()
+      if (!sub) {
+        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        if (!vapidKey) { alert("Push isn't configured yet."); return }
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) })
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) })
+      }
+      await setCategory(true)
     } catch (e) {
-      console.error('Push unsubscribe failed', e)
+      console.error('Notification toggle failed', e)
     } finally {
       setBusy(false)
     }
   }
 
-  if (status === 'unsupported') return null
+  if (!supported) return null
 
   return (
-    <div className="cozy-card bg-card p-3 mb-6 flex items-center justify-between gap-3">
-      <p className="font-pixel text-xs font-bold text-foreground flex items-center gap-2 shrink-0">
-        <Bell size={14} className="text-primary"/> Push Notifications
-      </p>
-      {status === 'denied' ? (
-        <span className="text-[10px] text-muted-foreground font-bold text-right">Blocked in settings</span>
-      ) : status === 'on' ? (
-        <button onClick={disable} disabled={busy} className="cozy-btn bg-muted hover:bg-muted/80 text-foreground font-bold px-3 py-1.5 transition-all text-[10px] font-pixel tracking-wide shrink-0">
-          {busy ? '...' : 'Turn Off'}
-        </button>
-      ) : (
-        <button onClick={enable} disabled={busy} className="cozy-btn bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-3 py-1.5 transition-all text-[10px] font-pixel tracking-wide shrink-0">
-          {busy ? 'Enabling...' : 'Enable'}
-        </button>
-      )}
-    </div>
+    <button onClick={toggle} disabled={busy} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-border font-pixel text-[10px] font-bold shrink-0 transition-all", enabled ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
+      <Bell size={12} /> {label}: {enabled ? "On" : "Off"}
+    </button>
   )
 }
 
@@ -865,8 +868,6 @@ function ProfileTab({ platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedI
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pt-4 max-w-2xl">
-
-      <PushNotificationCard />
 
       {isLoggedIn ? (
         <div className="cozy-card bg-card p-6 mb-8 flex flex-col items-center relative overflow-hidden">
@@ -953,27 +954,30 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
   const [newTitle, setNewTitle] = useState("")
   const [newCourse, setNewCourse] = useState("")
   const [newDate, setNewDate] = useState(format(new Date(), "yyyy-MM-dd"))
+  const [newTime, setNewTime] = useState("23:59")
 
   const [editingId, setEditingId] = useState<string | number | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editCourse, setEditCourse] = useState("")
   const [editDate, setEditDate] = useState("")
+  const [editTime, setEditTime] = useState("23:59")
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onAddTask(newTitle, newCourse, newDate)
-    setNewTitle(""); setNewCourse(""); setNewDate(format(new Date(), "yyyy-MM-dd")); setIsAdding(false)
+    onAddTask(newTitle, newCourse, newDate, newTime)
+    setNewTitle(""); setNewCourse(""); setNewDate(format(new Date(), "yyyy-MM-dd")); setNewTime("23:59"); setIsAdding(false)
   }
 
   const startEdit = (id: string | number, currentTitle: string, currentCourse: string, currentDueDate: any, e: React.MouseEvent) => {
     e.stopPropagation()
-    setEditingId(id); setEditTitle(currentTitle); setEditCourse(currentCourse); setEditDate(format(safeDate(currentDueDate), "yyyy-MM-dd"))
+    const d = safeDate(currentDueDate)
+    setEditingId(id); setEditTitle(currentTitle); setEditCourse(currentCourse); setEditDate(format(d, "yyyy-MM-dd")); setEditTime(format(d, "HH:mm"))
   }
 
   const saveEdit = (id: string | number, e: React.MouseEvent | React.FormEvent) => {
     e.stopPropagation()
     if (e.type === "submit") e.preventDefault()
-    if (editTitle.trim()) onEditTask(id, editTitle, editCourse, editDate)
+    if (editTitle.trim()) onEditTask(id, editTitle, editCourse, editDate, editTime)
     setEditingId(null)
   }
 
@@ -992,9 +996,12 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
         </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
-        <CategoryTab icon={<User size={16} />} label="Own" active={filter === "own"} onClick={() => setFilter("own")} />
-        <CategoryTab icon={<GraduationCap size={16} />} label="PLATO" active={filter === "plato"} onClick={() => setFilter("plato")} />
+      <div className="flex gap-2 mb-6 items-center justify-between">
+        <div className="flex gap-2">
+          <CategoryTab icon={<User size={16} />} label="Own" active={filter === "own"} onClick={() => setFilter("own")} />
+          <CategoryTab icon={<GraduationCap size={16} />} label="PLATO" active={filter === "plato"} onClick={() => setFilter("plato")} />
+        </div>
+        <NotificationToggle category="tasks" label="Deadlines" />
       </div>
 
       <div className="flex flex-col gap-6">
@@ -1006,6 +1013,7 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
                 <div className="flex flex-wrap gap-2">
                   <input type="text" placeholder="Course (optional)" value={newCourse} onChange={(e) => setNewCourse(e.target.value)} className="flex-1 min-w-[120px] bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-primary" />
                   <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-primary text-foreground min-w-[130px]" />
+                  <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-primary text-foreground min-w-[100px]" />
                   <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-4 py-2 flex items-center justify-center gap-2 grow sm:grow-0">
                     <Plus size={16} /> Add
                   </button>
@@ -1030,6 +1038,7 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
                     <div className="flex flex-wrap gap-2">
                       <input type="text" placeholder="Course" value={editCourse} onChange={(e) => setEditCourse(e.target.value)} className="flex-1 min-w-[120px] bg-background border-2 border-border rounded-lg px-2 py-1 text-sm font-bold focus:outline-none focus:border-primary" />
                       <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="bg-background border-2 border-border rounded-lg px-2 py-1 text-sm font-bold focus:outline-none focus:border-primary text-foreground min-w-[130px]" />
+                      <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="bg-background border-2 border-border rounded-lg px-2 py-1 text-sm font-bold focus:outline-none focus:border-primary text-foreground min-w-[100px]" />
                       <button type="submit" className="cozy-btn bg-primary text-primary-foreground p-1.5 rounded-lg flex items-center justify-center shrink-0"><Check size={16} /></button>
                     </div>
                   </form>
@@ -1046,7 +1055,7 @@ function JournalTab({ tasks, toggleTask, onAddTask, onEditTask, onDeleteTask }: 
                     </h4>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-pixel text-[10px] uppercase font-bold text-primary-foreground bg-primary px-2 py-1 rounded-md border-2 border-border shadow-[1px_1px_0px_var(--color-border)]">{task.course}</span>
-                      <span className="font-pixel text-xs font-bold text-secondary flex items-center gap-1 border-2 border-secondary/30 bg-secondary/10 px-2 py-0.5 rounded-md">Due {format(safeDate(task.dueDate), "MMM d")}</span>
+                      <span className="font-pixel text-xs font-bold text-secondary flex items-center gap-1 border-2 border-secondary/30 bg-secondary/10 px-2 py-0.5 rounded-md">Due {format(safeDate(task.dueDate), "MMM d, h:mm a")}</span>
                     </div>
                   </>
                 )}
