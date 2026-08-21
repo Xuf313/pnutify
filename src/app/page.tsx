@@ -957,8 +957,9 @@ function ProfileTab({ platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedI
             <div>
               <label className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1 block">Password</label>
               <div className="relative w-full">
-                <input type={showPassword ? "text" : "password"} className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-primary" value={platoCreds.password} onChange={e => setPlatoCreds({...platoCreds, password: e.target.value})} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                  <input type={showPassword ? "text" : "password"} className="w-full bg-background border-2 border-border rounded-lg p-3 pr-10 text-sm focus:outline-none focus:border-primary" value={platoCreds.password} onChange={e => setPlatoCreds({ ...platoCreds, password: e.target.value })} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"> {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                  </button>
               </div>
             </div>
             <button onClick={syncPlato} disabled={isSyncing} className="cozy-btn w-full py-3 bg-primary border-2 border-border text-primary-foreground shadow-[4px_4px_0px_var(--color-border)] font-pixel font-bold flex items-center justify-center gap-2 hover:bg-primary/90">
