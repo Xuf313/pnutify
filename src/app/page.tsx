@@ -431,7 +431,12 @@ export default function App() {
             </div>
             <h1 className="font-pixel text-3xl font-bold text-foreground tracking-wide leading-tight">PNUtify</h1>
             <p className="text-xs font-bold text-muted-foreground mt-2">{format(new Date(), "EEEE")}</p>
-            <p className="font-pixel text-2xl font-bold text-primary">{format(new Date(), "MMM d")}</p>
+            
+            {/* MOVED: Theme switcher placed next to the date with the 'compact' prop added */}
+            <div className="flex items-center justify-between mt-1">
+              <p className="font-pixel text-2xl font-bold text-primary">{format(new Date(), "MMM d")}</p>
+              <ThemeSwitcher current={theme} onChange={setTheme} compact />
+            </div>
           </div>
 
           <nav className="flex-1 px-4 py-6 flex flex-col gap-2">
@@ -447,7 +452,7 @@ export default function App() {
               <p className="font-pixel text-[9px] font-bold text-primary tracking-widest uppercase mb-1">정보의생명공학대학</p>
               <p className="text-xs font-bold text-muted-foreground leading-snug">인공지능전공</p>
             </div>
-            <ThemeSwitcher current={theme} onChange={setTheme} />
+            {/* REMOVED: ThemeSwitcher from here */}
           </div>
         </aside>
 
