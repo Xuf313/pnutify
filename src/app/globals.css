@@ -56,22 +56,30 @@
   --t-washi: rgba(240, 98, 146, 0.75);
 }
 
-/* ── Theme: Purple (Twilight) ── */
+/* ── Theme: Purple (Twilight - iPhone 12 Style) ── */
 [data-theme="midnight"] {
-  --t-background: #F5F3FF;
-  --t-foreground: #2E1065;
+  --t-background: #F7F5FC; 
+  --t-foreground: #2B213D; 
   --t-card: #FFFFFF;
-  --t-primary: #6D28D9;
-  --t-primary-fg: #FFFFFF;
-  --t-secondary: #0D9488;
-  --t-secondary-fg: #FFFFFF;
-  --t-accent: #8B5CF6;
+  
+  /* A slightly deeper violet so the date and icons remain readable on white */
+  --t-primary: #9B7ED4; 
+  --t-primary-fg: #FFFFFF; 
+  
+  /* The exact bright, vibrant iPhone 12 Purple for your badges and fills */
+  --t-secondary: #BCA3E8; 
+  --t-secondary-fg: #2B213D; 
+  
+  --t-accent: #A98DE0; 
   --t-accent-fg: #FFFFFF;
-  --t-muted: #EDE9FE;
-  --t-muted-fg: #7C3AED;
-  --t-border: #6D28D9;
-  --t-grid-color: rgba(109, 40, 217, 0.08);
-  --t-washi: rgba(13, 148, 136, 0.75);
+  
+  --t-muted: #EAE5F2;
+  --t-muted-fg: #73658C;
+  
+  /* Crisp, dark purple for the cozy UI outlines */
+  --t-border: #735D96; 
+  --t-grid-color: rgba(115, 93, 150, 0.15);
+  --t-washi: #9B7ED4; 
 }
 
 /* ── Theme: Autumn Campus (가을) ── */
