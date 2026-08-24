@@ -8,6 +8,16 @@ import { twMerge } from "tailwind-merge"
 
 function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
 
+function getDeviceId(): string {
+  if (typeof window === 'undefined') return ''
+  let id = localStorage.getItem('device_id')
+  if (!id) {
+    id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    localStorage.setItem('device_id', id)
+  }
+  return id
+}
+
 const safeDate = (d: any) => {
   if (!d) return new Date();
   const parsed = new Date(d);
@@ -191,7 +201,7 @@ export default function App() {
       fetch('/api/tasks/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks }),
+        body: JSON.stringify({ tasks, deviceId: getDeviceId() }),
       }).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
@@ -312,7 +322,6 @@ export default function App() {
     setClasses([]); 
     setTasks(prev => (prev || []).filter(t => t.source === 'own')); 
     setNotices((notices || []).filter(n => n.source !== 'classes'));
-    fetch('/api/plato', { method: 'DELETE' }).catch(() => {});
     alert("Logged out successfully.");
   }
 
@@ -623,7 +632,9 @@ function NoticesTab({ notices, toggleNotice, category, setCategory, isLoading, o
             <Star size={16} fill="currentColor" />
             <h3 className="font-pixel text-lg font-bold">Unread</h3>
           </div>
-          <NotificationToggle key={category} category={category} label={category === "cse" ? "CSE" : category === "international" ? "Intl." : "PLATO"} />
+          {category !== "classes" && (
+            <NotificationToggle key={category} category={category} label={category === "cse" ? "CSE" : "Intl."} />
+          )}
         </div>
 
         {isLoading ? (
@@ -834,7 +845,7 @@ function NotificationToggle({ category, label }: { category: string; label: stri
           return; 
         }
         
-        const res = await fetch('/api/push/categories')
+        const res = await fetch(`/api/push/categories?deviceId=${encodeURIComponent(getDeviceId())}`)
         const data = await res.json()
         
         if (data?.categories) {
@@ -861,7 +872,7 @@ function NotificationToggle({ category, label }: { category: string; label: stri
     await fetch('/api/push/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, enabled: value }),
+      body: JSON.stringify({ deviceId: getDeviceId(), category, enabled: value }),
     })
   }
 
@@ -883,7 +894,7 @@ function NotificationToggle({ category, label }: { category: string; label: stri
         const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
         if (!vapidKey) { alert("Push isn't configured yet."); return }
         sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) })
-        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) })
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub, deviceId: getDeviceId() }) })
       }
       await setCategory(true)
     } catch (e) {

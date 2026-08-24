@@ -3,20 +3,15 @@ import { Redis } from '@upstash/redis';
 import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
 import { scrapeAllNotices } from '@/lib/scrapeNotices';
-import { loginAndScrapePlato } from '@/lib/scrapePlato';
 
 export const maxDuration = 60;
 
 const redis = Redis.fromEnv();
 
-const SUB_KEY = 'push:subscription';
+const DEVICES_SET = 'push:devices';
+// Notices are public, shared data — one seen-list for everyone, not per-device.
 const SEEN_KEY = 'push:seen-ids';
-const CATEGORIES_KEY = 'push:categories';
-const TASKS_KEY = 'tasks:list';
-const NOTIFIED_DEADLINES_KEY = 'push:notified-deadlines';
-const PLATO_CREDS_KEY = 'plato:credentials';
-const PLATO_SEEN_KEY = 'push:plato-seen-ids';
-const DEFAULT_CATEGORIES: Record<string, boolean> = { international: true, cse: true, classes: true, tasks: true };
+const DEFAULT_CATEGORIES: Record<string, boolean> = { international: true, cse: true, tasks: true };
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -32,12 +27,19 @@ async function sendPush(subscription: PushSubscription, payload: { title: string
   await webpush.sendNotification(subscription, JSON.stringify(payload));
 }
 
+function isGoneError(err: unknown): boolean {
+  const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
+  return statusCode === 404 || statusCode === 410 || statusCode === 403;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get('secret') || request.headers.get('x-cron-secret');
-  
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!hasRedisEnv) {
+    return NextResponse.json({ error: 'Redis not configured' }, { status: 500 });
   }
 
   const hasVapidKeys = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
@@ -49,148 +51,117 @@ export async function GET(request: Request) {
     );
   }
 
+  // ---- Scrape notices once for everyone — this is public data, not
+  // personal, so there's no reason to re-scrape per device. ----
+  let notices: any[] = [];
+  let isFirstRun = false;
+  let newNotices: any[] = [];
   try {
-    // 1. Fetch categories and subscription first
-    const categories = hasRedisEnv
-      ? { ...DEFAULT_CATEGORIES, ...((await redis.get<Record<string, boolean>>(CATEGORIES_KEY)) || {}) }
-      : DEFAULT_CATEGORIES;
+    notices = await Promise.race([
+      scrapeAllNotices(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Scrape timed out after 20s')), 20000)),
+    ]);
+    const seenIdsArr = toStringArray(await redis.get<unknown>(SEEN_KEY));
+    const seenIds = new Set(seenIdsArr);
+    newNotices = notices.filter((n) => !seenIds.has(n.id));
+    isFirstRun = seenIdsArr.length === 0;
+    await redis.set(SEEN_KEY, notices.map((n) => n.id));
+  } catch (err) {
+    console.error('[push/send] scrape failed but continuing execution:', err);
+  }
 
-    const subscription = hasRedisEnv ? await redis.get<unknown>(SUB_KEY) : null;
-    const canPush = isPushSubscription(subscription) && hasVapidKeys;
+  const deviceIds = await redis.smembers(DEVICES_SET).catch(() => [] as string[]);
+  let notifiedDevices = 0;
+  let prunedDevices = 0;
 
-    // ---- 2. Task deadlines (Processed first so scraper timeouts don't block them) ----
-    let dueCount = 0;
-    if (hasRedisEnv && categories.tasks) {
-      const tasks = (await redis.get<any[]>(TASKS_KEY)) || [];
-      const notifiedDeadlines = new Set(toStringArray(await redis.get<unknown>(NOTIFIED_DEADLINES_KEY)));
-      const now = Date.now();
-      
-      // Remind the user if a task is due within the next 24 hours
-      const REMINDER_WINDOW = 24 * 60 * 60 * 1000; 
-
-      const dueTasks = tasks.filter((t) => {
-        const due = new Date(t.dueDate).getTime();
-        return !isNaN(due) && due <= (now + REMINDER_WINDOW) && !notifiedDeadlines.has(String(t.id));
-      });
-      
-      dueCount = dueTasks.length;
-
-      if (dueTasks.length > 0 && canPush) {
-        const firstTask = dueTasks[0];
-        const dueTime = new Date(firstTask.dueDate).getTime();
-        const hoursLeft = Math.floor((dueTime - now) / (1000 * 60 * 60));
-        
-        let timeString = 'soon';
-        if (hoursLeft > 0) {
-          timeString = `in about ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
-        } else if (hoursLeft <= 0) {
-          timeString = 'now (overdue)';
-        }
-
-        const body =
-          dueTasks.length === 1
-            ? `Reminder: "${firstTask.title}" is due ${timeString}.`
-            : `${dueTasks.length} upcoming tasks — including "${firstTask.title}".`;
-
-        try {
-          await sendPush(subscription as PushSubscription, { title: 'Upcoming Deadline', body, url: '/' });
-        } catch (err: unknown) {
-          const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
-          console.error('[push/send] deadline push failed:', err);
-          // Added 403 to automatically clear broken subscriptions
-          if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
-        }
-      }
-      if (dueTasks.length > 0) {
-        dueTasks.forEach((t) => notifiedDeadlines.add(String(t.id)));
-        await redis.set(NOTIFIED_DEADLINES_KEY, [...notifiedDeadlines]);
-      }
-    }
-
-    // ---- 3. New notices (CSE / International) ----
-    let notices: any[] = [];
-    let notifiableNotices: any[] = [];
-    let isFirstRun = false;
-    
+  for (const deviceId of deviceIds) {
     try {
-      notices = await Promise.race([
-        scrapeAllNotices(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Scrape timed out after 20s')), 20000)),
+      const [subscription, storedCategories] = await Promise.all([
+        redis.get<unknown>(`push:subscription:${deviceId}`),
+        redis.get<Record<string, boolean>>(`push:categories:${deviceId}`),
       ]);
+      if (!isPushSubscription(subscription)) {
+        // Key expired (inactive 45+ days) or was never fully written —
+        // either way, this device has nothing to push to. Drop it from the
+        // set now instead of waiting on a failed push that may never come.
+        await redis.srem(DEVICES_SET, deviceId);
+        prunedDevices++;
+        continue;
+      }
+      if (!hasVapidKeys) continue;
+      const categories = { ...DEFAULT_CATEGORIES, ...(storedCategories || {}) };
 
-      const seenIdsArr = hasRedisEnv ? toStringArray(await redis.get<unknown>(SEEN_KEY)) : [];
-      const seenIds = new Set(seenIdsArr);
-      const newNotices = notices.filter((n) => !seenIds.has(n.id));
-      isFirstRun = seenIdsArr.length === 0;
-      notifiableNotices = newNotices.filter((n) => categories[n.source]);
+      let devicePushed = false;
+      let subscriptionGone = false;
 
-      if (!isFirstRun && notifiableNotices.length > 0 && canPush) {
+      // ---- New notices, filtered by this device's own toggles ----
+      const notifiableNotices = newNotices.filter((n) => categories[n.source]);
+      if (!isFirstRun && notifiableNotices.length > 0) {
         const body =
           notifiableNotices.length === 1
             ? notifiableNotices[0].title
             : `${notifiableNotices.length} new notices — including "${notifiableNotices[0].title}"`;
         try {
           await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body, url: notifiableNotices[0].url || '/' });
-        } catch (err: unknown) {
-          const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
-          if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
+          devicePushed = true;
+        } catch (err) {
+          console.error(`[push/send] notice push failed for ${deviceId}:`, err);
+          if (isGoneError(err)) subscriptionGone = true;
         }
       }
-      if (hasRedisEnv) await redis.set(SEEN_KEY, notices.map((n) => n.id));
-    } catch (err) {
-      console.error('[push/send] scrape failed but continuing execution:', err);
-    }
 
-    // ---- 4. PLATO announcements ----
-    let platoNewCount = 0;
-    if (hasRedisEnv && categories.classes) {
-      try {
-        const creds = await redis.get<{ username: string; password: string }>(PLATO_CREDS_KEY);
-        if (creds?.username && creds?.password) {
-          const platoResult = await Promise.race([
-            loginAndScrapePlato(creds.username, creds.password),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PLATO login timed out after 20s')), 20000)),
-          ]);
-          if (platoResult.ok) {
-            const platoSeenArr = toStringArray(await redis.get<unknown>(PLATO_SEEN_KEY));
-            const platoSeen = new Set(platoSeenArr);
-            const newPlato = platoResult.announcements.filter((a: any) => !platoSeen.has(a.id));
-            const isPlatoFirstRun = platoSeenArr.length === 0;
-            platoNewCount = isPlatoFirstRun ? 0 : newPlato.length;
+      // ---- This device's own task deadlines ----
+      if (!subscriptionGone && categories.tasks) {
+        const tasks = (await redis.get<any[]>(`tasks:list:${deviceId}`)) || [];
+        const notifiedKey = `push:notified-deadlines:${deviceId}`;
+        const notifiedDeadlines = new Set(toStringArray(await redis.get<unknown>(notifiedKey)));
+        const now = Date.now();
+        const REMINDER_WINDOW = 24 * 60 * 60 * 1000;
+        const dueTasks = tasks.filter((t) => {
+          const due = new Date(t.dueDate).getTime();
+          return !isNaN(due) && due <= (now + REMINDER_WINDOW) && !notifiedDeadlines.has(String(t.id));
+        });
 
-            if (!isPlatoFirstRun && newPlato.length > 0 && canPush) {
-              const body =
-                newPlato.length === 1
-                  ? newPlato[0].title
-                  : `${newPlato.length} new PLATO announcements — including "${newPlato[0].title}"`;
-              try {
-                await sendPush(subscription as PushSubscription, { title: 'New PLATO Announcement', body, url: newPlato[0].url || '/' });
-              } catch (err: unknown) {
-                const statusCode = typeof err === 'object' && err !== null && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
-                if (statusCode === 404 || statusCode === 410 || statusCode === 403) await redis.del(SUB_KEY);
-              }
-            }
-            await redis.set(PLATO_SEEN_KEY, platoResult.announcements.map((a: any) => a.id));
-          } else {
-            console.error('[push/send] plato login failed:', platoResult.error);
+        if (dueTasks.length > 0) {
+          const firstTask = dueTasks[0];
+          const dueTime = new Date(firstTask.dueDate).getTime();
+          const hoursLeft = Math.floor((dueTime - now) / (1000 * 60 * 60));
+          const timeString = hoursLeft > 0 ? `in about ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}` : 'now (overdue)';
+          const body =
+            dueTasks.length === 1
+              ? `Reminder: "${firstTask.title}" is due ${timeString}.`
+              : `${dueTasks.length} upcoming tasks — including "${firstTask.title}".`;
+          try {
+            await sendPush(subscription as PushSubscription, { title: 'Upcoming Deadline', body, url: '/' });
+            devicePushed = true;
+            dueTasks.forEach((t) => notifiedDeadlines.add(String(t.id)));
+            await redis.set(notifiedKey, [...notifiedDeadlines]);
+          } catch (err) {
+            console.error(`[push/send] deadline push failed for ${deviceId}:`, err);
+            if (isGoneError(err)) subscriptionGone = true;
           }
         }
-      } catch (err) {
-        console.error('[push/send] plato check failed:', err);
       }
-    }
 
-    return NextResponse.json({
-      ok: true,
-      noticeCount: notices.length,
-      newCount: isFirstRun ? 0 : notifiableNotices.length,
-      firstRun: isFirstRun,
-      dueTaskCount: dueCount,
-      platoNewCount,
-      categories,
-    });
-  } catch (err) {
-    console.error('[push/send] redis/push stage failed:', err);
-    return NextResponse.json({ error: 'Redis or push stage failed', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      if (subscriptionGone) {
+        await redis.del(`push:subscription:${deviceId}`);
+        await redis.srem(DEVICES_SET, deviceId);
+        prunedDevices++;
+      } else if (devicePushed) {
+        notifiedDevices++;
+      }
+    } catch (err) {
+      console.error(`[push/send] device ${deviceId} failed:`, err);
+    }
   }
+
+  return NextResponse.json({
+    ok: true,
+    noticeCount: notices.length,
+    newNoticeCount: isFirstRun ? 0 : newNotices.length,
+    firstRun: isFirstRun,
+    deviceCount: deviceIds.length,
+    notifiedDevices,
+    prunedDevices,
+  });
 }
