@@ -97,38 +97,57 @@ export async function loginAndScrapePlato(username: string, password: string): P
     const announcements: any[] = [];
     const tasks: any[] = [];
 
-    $dash('.course-box').each((i, el) => {
-      const titleElement = $dash(el).find('.course-title h3').clone();
-      titleElement.find('.prof').remove();
-      const name = titleElement.text().trim();
-      const professor = $dash(el).find('.prof').text().trim();
+    // 4. Parse Enrolled Courses (new Splide-carousel UI)
+    $dash('ul.course-lists > li.splide__slide').each((i, el) => {
+      const linkTag = $dash(el).find('a.course-card');
+      const url = linkTag.attr('href');
 
-      if (name) {
+      if (url) {
+        const rawText = linkTag.text().trim().replace(/\s+/g, ' ');
+        const afterUndergrad = rawText.split('Undergraduate').pop()?.trim() || '';
+        // Course title always ends in a "(NNN)" section code — split there
+        // instead of grabbing everything after "Undergraduate", which was
+        // swallowing the professor name into the course name.
+        const titleMatch = afterUndergrad.match(/^(.*?\([0-9]+\))/);
+        const courseName = titleMatch ? titleMatch[1].trim() : (afterUndergrad || 'Unknown Course');
+        let professor = titleMatch ? afterUndergrad.slice(titleMatch[0].length).trim() : '';
+        // The avatar circle's initial letter gets concatenated onto the front
+        // of the professor's name in the flattened text — strip it off.
+        professor = professor.replace(/^(.)\s*(?=\1)/, '').trim();
+        const idMatch = url.match(/id=(\d+)/);
+
         classes.push({
-          id: `cls_${i}`,
-          name: name,
+          id: idMatch ? idMatch[1] : `cls_${i}`,
+          name: courseName,
           location: professor || "PLATO",
           time: "Online",
           days: [1, 2, 3, 4, 5],
-          color: "bg-primary text-primary-foreground"
+          color: i % 2 === 0 ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+          url
         });
       }
     });
 
-    $dash('.notice-item').each((i, el) => {
-      const courseName = $dash(el).find('.coursename').text().trim();
-      const title = $dash(el).find('.subject').text().trim();
-      const dateStr = $dash(el).find('.date').text().trim();
-      const href = $dash(el).find('.subject a, a.subject').attr('href') || $dash(el).find('a').first().attr('href');
-      const url = href ? (href.startsWith('http') ? href : `https://plato.pusan.ac.kr${href.startsWith('/') ? '' : '/'}${href}`) : '';
+    // 5. Parse Announcements (new board-list UI). Scoped to the
+    // course-linked announcements container only — the site-wide/system
+    // announcements block sits in a separate container and isn't something
+    // tied to a specific class, so it's excluded the same way the old
+    // Moodle-based scraper intentionally ignored system notices.
+    $dash('.announcement-item-course .csms-board-item').each((i, el) => {
+      const course = $dash(el).find('.coursename').text().trim();
+      const linkTag = $dash(el).find('a.btn-csms-link');
+      const title = linkTag.find('.text').text().trim();
+      const url = linkTag.attr('href');
+      const date = $dash(el).find('.csms-board-item-date').text().trim();
 
-      // ✅ FIX: Only push to the array if a specific course name exists!
-      // This naturally ignores site-wide PLATO ads and system notices.
-      if (title && courseName) {
+      if (title && url) {
+        const idMatch = url.match(/id=(\d+)/);
+        const id = idMatch ? `plato_ann_${idMatch[1]}` : `plato_ann_${Date.now()}_${i}`;
+
         announcements.push({
-          id: `plato_ann_${i}`,
-          title: `[${courseName}] ${title}`,
-          date: dateStr.split(' ')[0],
+          id,
+          title: course ? `[${course}] ${title}` : title,
+          date: date || new Date().toISOString(),
           source: 'classes',
           url,
           status: 'unread'
@@ -136,23 +155,29 @@ export async function loginAndScrapePlato(username: string, password: string): P
       }
     });
 
-    const todoBlock = $dash('.block_timeline, .block_myoverview');
-    if (!todoBlock.text().includes('계획된 일정이 없습니다.')) {
-      todoBlock.find('.list-group-item, .event-list-item, li').each((i, el) => {
-        const title = $dash(el).find('.event-name, .coursename').text().trim();
-        const dueDate = $dash(el).find('.date, .time').text().trim();
+    // 6. Parse Tasks / Progress (new accordion-per-course UI). Note: the
+    // per-task rows inside an expanded accordion aren't confirmed (every
+    // example we've seen so far has a count of 0), so this synthesizes one
+    // placeholder task per course with a pending count, due in 24h. Revisit
+    // once a course actually shows a nonzero count.
+    $dash('.accordion-item').each((i, el) => {
+      const course = $dash(el).find('.csms-user-picture .text-truncate').text().trim();
+      // Real class is "cell-upcoming-count" (a second token alongside
+      // "grid-cell"), not "grid-cell-upcoming-count" as one combined class.
+      const countText = $dash(el).find('.cell-upcoming-count .count').text().trim();
+      const count = parseInt(countText, 10);
 
-        if (title) {
-          tasks.push({
-            id: `plato_task_${i}`,
-            title,
-            course: "PLATO",
-            dueDate: new Date(dueDate).getTime() || Date.now(),
-            status: 'pending'
-          });
-        }
-      });
-    }
+      if (course && !isNaN(count) && count > 0) {
+        tasks.push({
+          id: `plato_task_${course.replace(/\s+/g, '_')}_${Date.now()}`,
+          title: `${count} pending task${count > 1 ? 's' : ''}`,
+          course: course,
+          dueDate: new Date(Date.now() + 86400000).getTime(), // Sets exactly 24 hours into the future
+          source: 'plato',
+          status: 'pending'
+        });
+      }
+    });
 
     return { ok: true, classes, announcements, tasks };
   } catch (error) {

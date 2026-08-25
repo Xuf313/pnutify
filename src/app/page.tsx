@@ -549,9 +549,8 @@ function TodayPanel({ tasks, classes }: any) {
               <div key={cls.id} className={cn("cozy-card p-3 relative overflow-hidden text-white", cls.color || 'bg-primary')}>
                 <div className="relative z-10">
                   <p className="font-bold text-sm leading-tight">{cls.name}</p>
-                  <div className="flex items-center gap-2 mt-1 opacity-80">
-                    <span className="font-pixel text-[10px]">{cls.time ? cls.time.split(" ")[0] : "Online"}</span>
-                    <span className="opacity-50">·</span>
+                  <p className="font-pixel text-[10px] mt-1 opacity-80">{cls.time ? cls.time.split(" ")[0] : "Online"}</p>
+                  <div className="flex items-center gap-1 mt-1 opacity-80">
                     <MapPin size={9} />
                     <span className="font-pixel text-[10px]">{cls.location}</span>
                   </div>
@@ -992,9 +991,8 @@ function ProfileTab({ platoCreds, setPlatoCreds, syncPlato, isSyncing, isLoggedI
               <div key={cls.id} className={cn("cozy-card p-3 relative overflow-hidden text-white", cls.color || "bg-primary")}>
                 <div className="relative z-10 text-left">
                   <p className="font-bold text-sm leading-tight">{cls.name}</p>
-                  <div className="flex items-center gap-2 mt-1 opacity-80">
-                    <span className="font-pixel text-[10px]">{cls.time ? cls.time.split(" ")[0] : "Online"}</span>
-                    <span className="opacity-50">·</span>
+                  <p className="font-pixel text-[10px] mt-1 opacity-80">{cls.time ? cls.time.split(" ")[0] : "Online"}</p>
+                  <div className="flex items-center gap-1 mt-1 opacity-80">
                     <MapPin size={9} />
                     <span className="font-pixel text-[10px]">{cls.location}</span>
                   </div>

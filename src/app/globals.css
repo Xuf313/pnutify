@@ -41,19 +41,20 @@
 /* ── Theme: Cherry Blossom (봄) ── */
 [data-theme="cherry"] {
   --t-background: #FFF0F7;
-  --t-foreground: #2D1020;
+  --t-background: #FCF5F7;
+  --t-foreground: #3D212A;
   --t-card: #FFFFFF;
-  --t-primary: #B5005B;
+  --t-primary: #D47E9B;
   --t-primary-fg: #FFFFFF;
-  --t-secondary: #7B2D8B;
-  --t-secondary-fg: #FFFFFF;
-  --t-accent: #F06292;
+  --t-secondary: #E8A3BA;
+  --t-secondary-fg: #3D212A;
+  --t-accent: #E08DA9;
   --t-accent-fg: #FFFFFF;
-  --t-muted: #FADADD;
-  --t-muted-fg: #8C4060;
-  --t-border: #B5005B;
-  --t-grid-color: rgba(181, 0, 91, 0.07);
-  --t-washi: rgba(240, 98, 146, 0.75);
+  --t-muted: #F2E5E9;
+  --t-muted-fg: #8C6572;
+  --t-border: #965D70;
+  --t-grid-color: rgba(150, 93, 112, 0.15);
+  --t-washi: #D47E9B;
 }
 
 /* ── Theme: Purple (Twilight - iPhone 12 Style) ── */
