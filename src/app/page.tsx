@@ -228,12 +228,6 @@ export default function App() {
 
         if (existingNotices.length > 0) {
           const publicExisting = existingNotices.filter((n: any) => n.source !== 'classes');
-          const existingIds = new Set(publicExisting.map((n: any) => n.id));
-          const brandNewNotices = formatted.filter((n: any) => !existingIds.has(n.id));
-
-          if (brandNewNotices.length > 0 && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification("New PNU Notice!", { body: brandNewNotices[0].title, icon: "/favicon.ico" });
-          }
 
           const mergedPublic = formatted.map((fresh: any) => {
             const found = publicExisting.find((ex: any) => ex.id === fresh.id);
@@ -276,12 +270,6 @@ export default function App() {
           const prevSafe = prev || [];
           const publicNotices = prevSafe.filter(n => n.source !== 'classes');
           const oldPlato = prevSafe.filter(n => n.source === 'classes');
-
-          const oldPlatoTitles = new Set(oldPlato.map((n: any) => n.title));
-          const brandNewPlato = formattedAnns.filter((n: any) => !oldPlatoTitles.has(n.title));
-          if (oldPlato.length > 0 && brandNewPlato.length > 0 && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification("New PLATO Announcement!", { body: brandNewPlato[0].title, icon: "/favicon.ico" });
-          }
 
           const mergedPlato = formattedAnns.map((fresh: any) => {
             const found = oldPlato.find((ex: any) => ex.title === fresh.title);

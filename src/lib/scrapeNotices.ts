@@ -102,7 +102,20 @@ function scrapePage($: cheerio.CheerioAPI, source: 'cse' | 'international', orig
 
 function findNextPageUrl($: cheerio.CheerioAPI, currentPage: number, base: string): string | null {
   const wantText = String(currentPage + 1);
+  const baseOrigin = new URL(base).origin;
   const allLinks = $('a').toArray();
+
+  const resolveSameOrigin = (href: string): string | null => {
+    try {
+      const resolved = new URL(href, base);
+      // Board pagination never legitimately crosses to a different
+      // subdomain — a numbered link that does is unrelated site chrome
+      // (nav, footer, cross-department links), not a real "next page".
+      return resolved.origin === baseOrigin ? resolved.toString() : null;
+    } catch {
+      return null;
+    }
+  };
   
   // 1. Direct text match
   for (const el of allLinks) {
@@ -118,7 +131,8 @@ function findNextPageUrl($: cheerio.CheerioAPI, currentPage: number, base: strin
     if (text === wantText || text === `[${wantText}]`) {
       const href = $(el).attr('href');
       if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-        return new URL(href, base).toString();
+        const resolved = resolveSameOrigin(href);
+        if (resolved) return resolved;
       }
     }
   }
@@ -134,7 +148,8 @@ function findNextPageUrl($: cheerio.CheerioAPI, currentPage: number, base: strin
       if (text.includes('다음') || text.includes('next') || title.includes('다음') || aria.includes('다음')) {
         const href = $el.attr('href');
         if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-          return new URL(href, base).toString();
+          const resolved = resolveSameOrigin(href);
+          if (resolved) return resolved;
         }
       }
     }
@@ -191,5 +206,13 @@ export async function scrapeAllNotices(): Promise<ScrapedNotice[]> {
     scrapeBoardPaginated(intlUrl, 'international', 'https://international.pusan.ac.kr', 'intl'),
   ]);
 
-  return [...cseNotices, ...intlNotices];
+  const combined = [...cseNotices, ...intlNotices];
+  const seen = new Set<string>();
+  const deduped: ScrapedNotice[] = [];
+  for (const notice of combined) {
+    if (seen.has(notice.id)) continue;
+    seen.add(notice.id);
+    deduped.push(notice);
+  }
+  return deduped;
 }

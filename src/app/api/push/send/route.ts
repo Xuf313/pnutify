@@ -94,23 +94,22 @@ export async function GET(request: Request) {
       let devicePushed = false;
       let subscriptionGone = false;
 
-      // ---- New notices, filtered by this device's own toggles ----
+      // ---- New notices, filtered by this device's own toggles — one push
+      // per notice rather than batching into an "and N others" message ----
       const notifiableNotices = newNotices.filter((n) => categories[n.source]);
       if (!isFirstRun && notifiableNotices.length > 0) {
-        const body =
-          notifiableNotices.length === 1
-            ? notifiableNotices[0].title
-            : `${notifiableNotices.length} new notices — including "${notifiableNotices[0].title}"`;
-        try {
-          await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body, url: notifiableNotices[0].url || '/' });
-          devicePushed = true;
-        } catch (err) {
-          console.error(`[push/send] notice push failed for ${deviceId}:`, err);
-          if (isGoneError(err)) subscriptionGone = true;
+        for (const notice of notifiableNotices) {
+          try {
+            await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body: notice.title, url: notice.url || '/' });
+            devicePushed = true;
+          } catch (err) {
+            console.error(`[push/send] notice push failed for ${deviceId}:`, err);
+            if (isGoneError(err)) { subscriptionGone = true; break; }
+          }
         }
       }
 
-      // ---- This device's own task deadlines ----
+      // ---- This device's own task deadlines — same one-per-task treatment ----
       if (!subscriptionGone && categories.tasks) {
         const tasks = (await redis.get<any[]>(`tasks:list:${deviceId}`)) || [];
         const notifiedKey = `push:notified-deadlines:${deviceId}`;
@@ -122,23 +121,19 @@ export async function GET(request: Request) {
           return !isNaN(due) && due <= (now + REMINDER_WINDOW) && !notifiedDeadlines.has(String(t.id));
         });
 
-        if (dueTasks.length > 0) {
-          const firstTask = dueTasks[0];
-          const dueTime = new Date(firstTask.dueDate).getTime();
+        for (const task of dueTasks) {
+          const dueTime = new Date(task.dueDate).getTime();
           const hoursLeft = Math.floor((dueTime - now) / (1000 * 60 * 60));
           const timeString = hoursLeft > 0 ? `in about ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}` : 'now (overdue)';
-          const body =
-            dueTasks.length === 1
-              ? `Reminder: "${firstTask.title}" is due ${timeString}.`
-              : `${dueTasks.length} upcoming tasks — including "${firstTask.title}".`;
+          const body = `Reminder: "${task.title}" is due ${timeString}.`;
           try {
             await sendPush(subscription as PushSubscription, { title: 'Upcoming Deadline', body, url: '/' });
             devicePushed = true;
-            dueTasks.forEach((t) => notifiedDeadlines.add(String(t.id)));
+            notifiedDeadlines.add(String(task.id));
             await redis.set(notifiedKey, [...notifiedDeadlines]);
           } catch (err) {
             console.error(`[push/send] deadline push failed for ${deviceId}:`, err);
-            if (isGoneError(err)) subscriptionGone = true;
+            if (isGoneError(err)) { subscriptionGone = true; break; }
           }
         }
       }

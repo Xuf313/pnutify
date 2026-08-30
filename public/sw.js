@@ -17,12 +17,9 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || '/';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) return client.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    })
-  );
+  // Always open/navigate to this notification's own target. The previous
+  // version reused an already-open window with a plain focus() and never
+  // told it where to go, so every notification after the first landed on a
+  // stale screen instead of its own notice.
+  event.waitUntil(self.clients.openWindow(url));
 });
