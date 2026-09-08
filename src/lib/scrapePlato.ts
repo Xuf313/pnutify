@@ -4,6 +4,23 @@ export type PlatoResult =
   | { ok: true; classes: any[]; announcements: any[]; tasks: any[] }
   | { ok: false; error: string };
 
+// PLATO's date/time strings ("2026-09-30 23:59" or "...:00") are Korea local
+// time with no timezone marker. Parsed naively, JS treats them as the
+// server's own timezone — Vercel runs in UTC — which silently shifted every
+// deadline forward by 9 hours (23:59 KST became 08:59 the next day once
+// displayed back in KST). Anchoring to +09:00 explicitly fixes that
+// regardless of what timezone the server happens to run in.
+function parsePlatoDateTime(text: string): number {
+  const match = text.trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(:\d{2})?/);
+  if (!match) {
+    const fallback = new Date(text.trim());
+    return isNaN(fallback.getTime()) ? NaN : fallback.getTime();
+  }
+  const [, datePart, timePart, secPart] = match;
+  const d = new Date(`${datePart}T${timePart}${secPart || ':00'}+09:00`);
+  return isNaN(d.getTime()) ? NaN : d.getTime();
+}
+
 export async function loginAndScrapePlato(username: string, password: string): Promise<PlatoResult> {
   try {
     const headers = {
@@ -179,7 +196,7 @@ export async function loginAndScrapePlato(username: string, password: string): P
           // Date column is a "start ~ end" range — the deadline is the end.
           const dateRangeText = $row.find('.cell-date, .cell-period').first().text().trim();
           const endDateText = dateRangeText.split('~').pop()?.trim();
-          const dueDate = endDateText ? new Date(endDateText).getTime() : NaN;
+          const dueDate = endDateText ? parsePlatoDateTime(endDateText) : NaN;
 
           if (activityName && !isNaN(dueDate)) {
             tasks.push({
