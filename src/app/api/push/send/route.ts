@@ -95,12 +95,17 @@ export async function GET(request: Request) {
       let subscriptionGone = false;
 
       // ---- New notices, filtered by this device's own toggles — one push
-      // per notice rather than batching into an "and N others" message ----
+      // per notice rather than batching into an "and N others" message.
+      // The click target is the app's own path (with the notice's id/title/
+      // url as query params) rather than the notice's external URL directly —
+      // navigating a PWA straight to a cross-origin URL from the service
+      // worker is unreliable and can leave a blank screen on close.
       const notifiableNotices = newNotices.filter((n) => categories[n.source]);
       if (!isFirstRun && notifiableNotices.length > 0) {
         for (const notice of notifiableNotices) {
+          const target = `/?noticeId=${encodeURIComponent(notice.id)}&noticeTitle=${encodeURIComponent(notice.title)}&noticeUrl=${encodeURIComponent(notice.url || '')}`;
           try {
-            await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body: notice.title, url: notice.url || '/' });
+            await sendPush(subscription as PushSubscription, { title: 'New PNU Notice', body: notice.title, url: target });
             devicePushed = true;
           } catch (err) {
             console.error(`[push/send] notice push failed for ${deviceId}:`, err);

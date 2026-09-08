@@ -122,6 +122,20 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const noticeId = params.get('noticeId');
+    if (noticeId) {
+      setActiveTab('notices');
+      openNotice({
+        id: noticeId,
+        title: params.get('noticeTitle') || '',
+        url: params.get('noticeUrl') || '',
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     setIsMounted(true);
 
     try {
@@ -318,9 +332,12 @@ export default function App() {
     setNotices((notices || []).map((n) => n.id === id ? { ...n, status: n.status === "unread" ? "read" : "unread" } : n))
   }
 
+  const markRead = (id: string | number) => {
+    setNotices((notices || []).map((n) => n.id === id ? { ...n, status: "read" } : n))
+  }
+
   const openNotice = (notice: any) => {
     setSelectedNotice(notice)
-    setNotices((notices || []).map((n) => n.id === notice.id ? { ...n, status: "read" } : n))
   }
 
   const toggleTask = (id: string | number) => {
@@ -483,7 +500,7 @@ export default function App() {
 
             <div className="flex flex-col gap-2 shrink-0">
               {selectedNotice.url && (
-                <a href={selectedNotice.url} target="_blank" rel="noopener noreferrer" className="cozy-btn flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 text-sm transition-all">
+                <a href={selectedNotice.url} target="_blank" rel="noopener noreferrer" onClick={() => markRead(selectedNotice.id)} className="cozy-btn flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 text-sm transition-all">
                   Open in Browser <ExternalLink size={16} />
                 </a>
               )}

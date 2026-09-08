@@ -155,11 +155,13 @@ export async function loginAndScrapePlato(username: string, password: string): P
       }
     });
 
-    // 6. Parse Tasks / Progress (new accordion-per-course UI). Note: the
-    // per-task rows inside an expanded accordion aren't confirmed (every
-    // example we've seen so far has a count of 0), so this synthesizes one
-    // placeholder task per course with a pending count, due in 24h. Revisit
-    // once a course actually shows a nonzero count.
+    // 6. Parse Tasks / Progress (new accordion-per-course UI). Individual
+    // activity rows inside an expanded accordion are extracted below using
+    // the same grid-table/grid-row pattern this dashboard uses elsewhere;
+    // this is a best-effort guess since we only have a rendered screenshot
+    // of a populated example, not its actual DOM. Falls back to the old
+    // one-line-per-course placeholder if these selectors don't match anything,
+    // so a wrong guess degrades gracefully instead of losing the count entirely.
     $dash('.accordion-item').each((i, el) => {
       const course = $dash(el).find('.csms-user-picture .text-truncate').text().trim();
       // Real class is "cell-upcoming-count" (a second token alongside
@@ -168,14 +170,40 @@ export async function loginAndScrapePlato(username: string, password: string): P
       const count = parseInt(countText, 10);
 
       if (course && !isNaN(count) && count > 0) {
-        tasks.push({
-          id: `plato_task_${course.replace(/\s+/g, '_')}_${Date.now()}`,
-          title: `${count} pending task${count > 1 ? 's' : ''}`,
-          course: course,
-          dueDate: new Date(Date.now() + 86400000).getTime(), // Sets exactly 24 hours into the future
-          source: 'plato',
-          status: 'pending'
+        const rows = $dash(el).find('.accordion-collapse .grid-row, .accordion-body .grid-row, .accordion-collapse tbody tr');
+        let addedAny = false;
+
+        rows.each((j, rowEl) => {
+          const $row = $dash(rowEl);
+          const activityName = $row.find('.cell-activity, .cell-name, a').first().text().trim();
+          // Date column is a "start ~ end" range — the deadline is the end.
+          const dateRangeText = $row.find('.cell-date, .cell-period').first().text().trim();
+          const endDateText = dateRangeText.split('~').pop()?.trim();
+          const dueDate = endDateText ? new Date(endDateText).getTime() : NaN;
+
+          if (activityName && !isNaN(dueDate)) {
+            tasks.push({
+              id: `plato_task_${course.replace(/\s+/g, '_')}_${j}`,
+              title: activityName,
+              course: course,
+              dueDate,
+              source: 'plato',
+              status: 'pending'
+            });
+            addedAny = true;
+          }
         });
+
+        if (!addedAny) {
+          tasks.push({
+            id: `plato_task_${course.replace(/\s+/g, '_')}_${Date.now()}`,
+            title: `${count} pending task${count > 1 ? 's' : ''}`,
+            course: course,
+            dueDate: new Date(Date.now() + 86400000).getTime(), // Sets exactly 24 hours into the future
+            source: 'plato',
+            status: 'pending'
+          });
+        }
       }
     });
 
