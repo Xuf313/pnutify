@@ -5,9 +5,26 @@ import { setRedisForTesting, KEYS } from '../redis';
 import { runNotificationCycle } from '../push';
 import { refreshNotices, BOARD_DOWN_ALERT_MS, FULL_REFRESH_MS } from '../notices';
 import * as scrape from '../scrapeNotices';
+import { OWNER_KEYS } from '../owner';
 import type { NoticeSource, ScrapedNotice } from '../scrapeNotices';
 
 vi.mock('web-push', () => ({ default: { setVapidDetails: vi.fn(), sendNotification: vi.fn() } }));
+
+// Owner mode: PLATO/NESPA results are simulated; syncOwner stores whatever ownerFixture holds.
+let ownerFixture: unknown = null;
+vi.mock('../ownerSync', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../ownerSync')>();
+  const { getRedis } = await import('../redis');
+  const { OWNER_KEYS } = await import('../owner');
+  return {
+    ...real,
+    syncOwner: vi.fn(async (now: number) => {
+      const data = { checkedAt: now, ...(ownerFixture as object) };
+      await getRedis()!.set(OWNER_KEYS.data, data);
+      return data;
+    }),
+  };
+});
 
 // The boards are simulated: each test sets what they return. null = the site is down.
 const boards: Record<NoticeSource, ScrapedNotice[] | null> = { cse: [], international: [] };
@@ -35,9 +52,9 @@ function notice(n: number, source: NoticeSource = 'cse', postedAt = T0, title = 
   return { id: `${prefix}_${n}`, title, date: '2026.11.19', postedAt, source, url: `https://example.pusan.ac.kr/${n}`, pinned: false };
 }
 
-function addDevice(id: string, categories: Partial<Record<'cse' | 'international' | 'tasks', boolean>>, tasks: unknown[] = []) {
+function addDevice(id: string, categories: Partial<Record<'cse' | 'international' | 'tasks' | 'courses', boolean>>, tasks: unknown[] = []) {
   redis.kv.set(KEYS.subscription(id), { endpoint: `https://push.example/${id}`, keys: { p256dh: 'p', auth: 'a' } });
-  redis.kv.set(KEYS.categories(id), { cse: false, international: false, tasks: false, ...categories });
+  redis.kv.set(KEYS.categories(id), { cse: false, international: false, tasks: false, courses: false, ...categories });
   redis.kv.set(KEYS.tasks(id), tasks);
   redis.sets.set(KEYS.devices, new Set([...(redis.sets.get(KEYS.devices) ?? []), id]));
 }
@@ -249,5 +266,69 @@ describe('without Redis', () => {
   it('does nothing and says why', async () => {
     setRedisForTesting(null);
     await expect(runNotificationCycle(T0)).resolves.toMatchObject({ ok: false, skipped: 'redis-not-configured' });
+  });
+});
+
+describe('owner mode', () => {
+  const plato = (deadlines: unknown[], announcements: unknown[] = []) => ({
+    configured: true,
+    ok: true,
+    data: { name: 'Me', courses: [], deadlines, announcements },
+  });
+  const nespa = { configured: false, ok: false };
+
+  beforeEach(() => {
+    process.env.OWNER_SECRET = 'o'.repeat(48);
+    ownerFixture = { plato: plato([]), nespa };
+  });
+  afterEach(() => {
+    delete process.env.OWNER_SECRET;
+  });
+
+  it('sends new PLATO announcements only to owner devices with course alerts on', async () => {
+    addDevice('mine', { courses: true });
+    addDevice('stranger', { courses: true, cse: true });
+    redis.sets.set(OWNER_KEYS.devices, new Set(['mine']));
+    await runNotificationCycle(T0);
+
+    ownerFixture = {
+      plato: plato([], [{ id: 'platonews_9', title: 'Quiz moved to Friday', course: 'OS', author: 'Prof', postedAt: T0, url: 'https://plato.pusan.ac.kr/x', excerpt: '' }]),
+      nespa,
+    };
+    await runNotificationCycle(T0 + 21 * MIN);
+    expect(sentTo('mine')).toEqual([{ title: 'PLATO · OS', body: 'Quiz moved to Friday', url: '/?tab=briefing', tag: 'platonews_9' }]);
+    expect(sentTo('stranger')).toEqual([]);
+
+    await runNotificationCycle(T0 + 42 * MIN);
+    expect(sentTo('mine')).toHaveLength(1);
+  });
+
+  it('adds PLATO deadlines to owner reminders, skipping ones marked done', async () => {
+    const due = T0 + 50 * MIN;
+    ownerFixture = {
+      plato: plato([
+        { id: 'plato_1', title: 'HW1', course: 'OS', dueAt: due, url: 'u', kind: 'assign' },
+        { id: 'plato_2', title: 'HW2', course: 'OS', dueAt: due, url: 'u', kind: 'assign' },
+      ]),
+      nespa,
+    };
+    redis.kv.set(OWNER_KEYS.state, { tasks: [], deleted: {}, readIds: [], external: { plato_2: { done: true, at: 1 } } });
+    addDevice('mine', { tasks: true });
+    addDevice('stranger', { tasks: true });
+    redis.sets.set(OWNER_KEYS.devices, new Set(['mine']));
+
+    await runNotificationCycle(T0);
+    expect(sentTo('mine').map((x) => x.body)).toEqual(['HW1 · OS']);
+    expect(sentTo('stranger')).toEqual([]);
+  });
+
+  it('leaves the quick per-minute run untouched when PLATO was synced recently', async () => {
+    addDevice('mine', { courses: true });
+    redis.sets.set(OWNER_KEYS.devices, new Set(['mine']));
+    await runNotificationCycle(T0);
+    redis.commands = 0;
+    await runNotificationCycle(T0 + MIN);
+    // the usual 5, plus reading the owner's sync time
+    expect(redis.commands).toBeLessThanOrEqual(6);
   });
 });

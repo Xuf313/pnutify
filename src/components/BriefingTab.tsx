@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowRight, BellRing, Check, Clock, Globe, Monitor, Newspaper, Smartphone, Sparkles } from "lucide-react";
+import { ArrowRight, BellRing, BookOpen, Check, Clock, ExternalLink, Globe, Monitor, Newspaper, Smartphone, Sparkles, TriangleAlert } from "lucide-react";
 import { cn, EmptyState, Pill, SectionTitle } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, relative } from "@/lib/client/time";
 import { isIOS, isStandalone } from "@/lib/client/push";
-import type { AlertCategories, Notice, Tab, Task } from "@/lib/client/types";
+import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
 import { SOURCE_LABEL } from "@/lib/client/types";
 import { isFreshNotice } from "@/lib/client/notices";
 
@@ -17,6 +17,10 @@ type Props = {
   notices: Notice[];
   readIds: Set<string>;
   tasks: Task[];
+  /** Owner mode only: PLATO announcements and NESPA notices, newest first. */
+  posts: CoursePost[];
+  ownerData: OwnerData | null;
+  onOpenPost: (post: CoursePost) => void;
   alerts: AlertCategories;
   alertsReady: boolean;
   canInstall: boolean;
@@ -46,12 +50,14 @@ export function BriefingTab(p: Props) {
   );
   const fresh = allFresh.slice(0, 6);
   const freshCount = allFresh.length;
+  const newPosts = p.posts.filter((x) => !p.readIds.has(x.id) && x.postedAt !== null && now - x.postedAt < 7 * DAY);
 
   // One calm sentence about the shape of the day.
   const parts: string[] = [];
   if (overdue.length) parts.push(`${plural(overdue.length, "task")} overdue`);
   if (dueToday.length) parts.push(`${plural(dueToday.length, "deadline")} today`);
   if (freshCount) parts.push(`${plural(freshCount, "new notice")}`);
+  if (newPosts.length) parts.push(`${plural(newPosts.length, "new course post")}`);
   const summary =
     parts.length === 0
       ? thisWeek.length
@@ -137,6 +143,9 @@ export function BriefingTab(p: Props) {
         </div>
       </section>
 
+      {/* ---------- PLATO + NESPA (owner mode) ---------- */}
+      {p.ownerData && <CourseSection data={p.ownerData} posts={p.posts} readIds={p.readIds} now={now} onOpen={p.onOpenPost} />}
+
       {/* ---------- notices ---------- */}
       <section>
         <SectionTitle
@@ -211,6 +220,57 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+function CourseSection({ data, posts, readIds, now, onOpen }: { data: OwnerData; posts: CoursePost[]; readIds: Set<string>; now: number; onOpen: (p: CoursePost) => void }) {
+  const recent = posts.filter((x) => x.postedAt === null || now - x.postedAt < 14 * DAY).slice(0, 6);
+  const problems = [data.plato, data.nespa].map((s) => s.error).filter(Boolean) as string[];
+  const status = [
+    data.plato.configured && `PLATO ${data.plato.syncedAt ? relative(data.plato.syncedAt, now) : "not synced yet"}`,
+    data.nespa.configured && `NESPA ${data.nespa.syncedAt ? relative(data.nespa.syncedAt, now) : "not synced yet"}`,
+  ].filter(Boolean);
+  return (
+    <section>
+      <SectionTitle icon={<BookOpen size={18} />}>From your courses</SectionTitle>
+      {status.length > 0 && <p className="text-xs font-bold text-muted-foreground -mt-1 mb-2">Synced: {status.join(" · ")}</p>}
+      {problems.map((msg) => (
+        <p key={msg} className="text-xs font-bold text-[#E5484D] flex items-start gap-1.5 mb-2">
+          <TriangleAlert size={14} className="shrink-0 mt-px" /> {msg}
+        </p>
+      ))}
+      {recent.length === 0 ? (
+        <EmptyState title="No new course posts">PLATO announcements and NESPA notices from the last two weeks show up here.</EmptyState>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {recent.map((x) => {
+            const isRead = readIds.has(x.id);
+            return (
+              <li key={x.id}>
+                <button
+                  onClick={() => onOpen(x)}
+                  className={cn("cozy-card interactive bg-card w-full text-left p-3.5 flex gap-3 items-start", isRead && "opacity-65 border-dashed shadow-none")}
+                >
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-bold text-foreground leading-snug line-clamp-2">{x.title}</span>
+                    {x.excerpt && <span className="block text-sm text-muted-foreground line-clamp-1 mt-0.5">{x.excerpt}</span>}
+                    <span className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {!isRead && <Pill tone="primary">New</Pill>}
+                      <Pill tone={x.source === "PLATO" ? "secondary" : "muted"}>{x.source}</Pill>
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {x.course && x.course !== x.source ? `${x.course} · ` : ""}
+                        {x.postedAt ? relative(x.postedAt, now) : ""}
+                      </span>
+                    </span>
+                  </span>
+                  <ExternalLink size={15} className="text-muted-foreground shrink-0 mt-1" aria-hidden />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onToggle: (id: string) => void }) {
   const overdue = task.status === "pending" && task.dueDate < now;
   const soon = task.status === "pending" && !overdue && task.dueDate - now < DAY;
@@ -230,10 +290,16 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
       <div className="flex-1 min-w-0">
         <p className={cn("font-bold text-foreground leading-snug truncate", done && "line-through")}>{task.title}</p>
         <p className="text-xs font-bold text-muted-foreground mt-0.5 truncate">
-          {task.course && task.course !== "General" ? `${task.course} · ` : ""}
+          {task.source === "plato" || task.source === "nespa" ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
+          {task.course && task.course !== "General" && task.course !== "NESPA" ? `${task.course} · ` : ""}
           {formatDue(task.dueDate, now)}
         </p>
       </div>
+      {task.url && (
+        <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-md text-muted-foreground hover:text-primary" aria-label={`Open "${task.title}"`}>
+          <ExternalLink size={15} />
+        </a>
+      )}
       {!done && (
         <Pill tone={overdue ? "danger" : soon ? "primary" : "muted"} className="shrink-0">
           {overdue ? "Overdue" : relative(task.dueDate, now)}

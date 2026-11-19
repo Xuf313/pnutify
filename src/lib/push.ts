@@ -1,10 +1,13 @@
 import webpush, { type PushSubscription } from 'web-push';
 import { getRedis, KEYS, withLock } from './redis';
 import { BOARD_DOWN_ALERT_MS, refreshNotices, type Notice } from './notices';
+import { OWNER_KEYS, ownerEnabled } from './owner';
+import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
-export type Categories = { cse: boolean; international: boolean; tasks: boolean };
+/** `courses` (PLATO and NESPA announcements) only ever applies to owner devices. */
+export type Categories = { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
 /** Nothing is on until the student turns it on. */
-export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, tasks: false };
+export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, tasks: false, courses: false };
 
 export function normalizeCategories(value: unknown): Categories {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
@@ -12,6 +15,7 @@ export function normalizeCategories(value: unknown): Categories {
     cse: v.cse === true,
     international: v.international === true,
     tasks: v.tasks === true,
+    courses: v.courses === true,
   };
 }
 
@@ -68,7 +72,27 @@ export type RunReport = {
   staleSources: string[];
   /** Boards that have failed for BOARD_DOWN_ALERT_MS or more: the scraper may need fixing. */
   boardsDown: string[];
+  /** Owner mode: whether PLATO/NESPA were re-read this run, and how many new course posts were found. */
+  owner?: { synced: boolean; fresh: number };
 };
+
+type CourseItem = { id: string; title: string; source: 'PLATO' | 'NESPA'; course: string; postedAt: number | null; url: string };
+
+/** New PLATO announcements and NESPA notices, as one list. */
+function courseItems(d: OwnerData | null): CourseItem[] {
+  const plato = (d?.plato.data?.announcements ?? []).map((a) => ({ id: a.id, title: a.title, source: 'PLATO' as const, course: a.course, postedAt: a.postedAt, url: a.url }));
+  const nespa = (d?.nespa.data?.notices ?? []).map((n) => ({ id: n.id, title: n.title, source: 'NESPA' as const, course: 'NESPA', postedAt: n.postedAt, url: n.url }));
+  return [...plato, ...nespa];
+}
+
+/** PLATO deadlines and NESPA assignments, shaped like the owner's own tasks, minus the ones marked done. */
+function externalTasks(d: OwnerData | null, done: Set<string>, now: number): StoredTask[] {
+  const plato = (d?.plato.data?.deadlines ?? []).map((x) => ({ id: x.id, title: x.title, course: x.course || 'PLATO', dueDate: x.dueAt }));
+  const nespa = (d?.nespa.data?.assignments ?? [])
+    .filter((a) => a.dueAt !== null && !a.score)
+    .map((a) => ({ id: a.id, title: a.title, course: 'NESPA', dueDate: a.dueAt as number }));
+  return [...plato, ...nespa].filter((t) => !done.has(t.id) && t.dueDate > now);
+}
 
 /** Deadline reminders are checked at most this often, which keeps per-minute runs cheap. */
 export const DEADLINE_CHECK_EVERY_MS = 4.5 * 60 * 1000;
@@ -123,6 +147,26 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
     const lastDeadlineCheck = Number(await redis.get<number>(KEYS.deadlinesCheckedAt)) || 0;
     const checkDeadlines = now - lastDeadlineCheck >= DEADLINE_CHECK_EVERY_MS;
 
+    // ---- Owner mode: re-read PLATO/NESPA every 20 minutes, find new course posts. ----
+    let ownerData: OwnerData | null = null;
+    let ownerSynced = false;
+    let ownerFresh: CourseItem[] = [];
+    if (ownerEnabled()) {
+      ownerData = await getOwnerData();
+      if (ownerDataStale(ownerData, now)) {
+        ownerData = await syncOwner(now);
+        ownerSynced = true;
+        const items = courseItems(ownerData);
+        let pushedOwner = await redis.get<string[]>(OWNER_KEYS.pushed);
+        // First run: everything already there counts as seen.
+        if (!Array.isArray(pushedOwner)) pushedOwner = items.map((i) => i.id);
+        const seen = new Set(pushedOwner);
+        ownerFresh = items.filter((i) => !seen.has(i.id) && (i.postedAt === null || now - i.postedAt <= NOTICE_POST_MAX_AGE_MS));
+        const current = new Set(items.map((i) => i.id));
+        await redis.set(OWNER_KEYS.pushed, [...new Set([...pushedOwner.filter((id) => current.has(id)), ...items.map((i) => i.id)])]);
+      }
+    }
+
     const report: RunReport = {
       ok: true,
       checked: changed ? 'full' : 'quick',
@@ -134,14 +178,27 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
       pruned: 0,
       staleSources: snapshot.staleSources,
       boardsDown,
+      ...(ownerEnabled() ? { owner: { synced: ownerSynced, fresh: ownerFresh.length } } : {}),
     };
     // Most runs end here: nothing new and reminders were checked recently.
-    if (fresh.length === 0 && !checkDeadlines) return report;
+    if (fresh.length === 0 && ownerFresh.length === 0 && !checkDeadlines) return report;
     if (checkDeadlines) await redis.set(KEYS.deadlinesCheckedAt, now);
 
     const hasVapid = configureVapid();
     const deviceIds = (await redis.smembers(KEYS.devices).catch(() => [])) as string[];
     report.devices = deviceIds.length;
+
+    // Owner devices get course posts and PLATO/NESPA deadlines on top of everything else.
+    const ownerDevices = new Set<string>();
+    let ownerDeadlines: StoredTask[] = [];
+    if (ownerData && (ownerFresh.length > 0 || checkDeadlines)) {
+      for (const id of (await redis.smembers(OWNER_KEYS.devices).catch(() => [])) as string[]) ownerDevices.add(id);
+      if (ownerDevices.size > 0 && checkDeadlines) {
+        const state = await getOwnerState();
+        const done = new Set(Object.entries(state.external).filter(([, x]) => x.done).map(([id]) => id));
+        ownerDeadlines = externalTasks(ownerData, done, now);
+      }
+    }
 
     const handleDevice = async (deviceId: string, subscription: unknown, rawCategories: unknown, rawTasks: unknown, rawNotified: unknown) => {
       if (!subscription || typeof subscription !== 'object' || !('endpoint' in subscription)) {
@@ -178,8 +235,31 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         }
       }
 
+      const isOwner = ownerDevices.has(deviceId);
+      if (isOwner && categories.courses && ownerFresh.length > 0) {
+        if (ownerFresh.length > MAX_INDIVIDUAL_NOTICE_PUSHES) {
+          outgoing.push({
+            payload: {
+              title: `${ownerFresh.length} new course posts`,
+              body: ownerFresh.slice(0, 3).map((i) => `• ${i.title}`).join('\n'),
+              url: '/?tab=briefing',
+              tag: 'course-summary',
+            },
+            urgency: 'high',
+          });
+        } else {
+          for (const i of ownerFresh) {
+            outgoing.push({
+              payload: { title: `${i.source}${i.course && i.course !== i.source ? ` · ${i.course}` : ''}`, body: i.title, url: '/?tab=briefing', tag: i.id },
+              urgency: 'high',
+            });
+          }
+        }
+      }
+
       if (checkDeadlines && categories.tasks) {
-        const tasks = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
+        const own = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
+        const tasks = isOwner ? [...own, ...ownerDeadlines] : own;
         const notified = Array.isArray(rawNotified) ? (rawNotified as string[]) : [];
         const notifiedSet = new Set(notified);
         const newlyNotified: string[] = [];

@@ -11,6 +11,11 @@ export const KEYS = {
   dismissed: 'dismissed_cards_v1',
   /** Pending first-visit cutoff (a number) until old notices are marked read, then "done". */
   readSeed: 'read_seed_v1',
+  /** Owner mode: deleted task ids (so other devices don't bring them back) and PLATO/NESPA done flags. */
+  deletedTasks: 'owner_deleted_v1',
+  external: 'owner_external_v1',
+  isOwner: 'owner_device_v1',
+  ownerData: 'owner_data_v1',
 } as const;
 
 // Keys from older versions. PLATO credentials were kept here in plain text —

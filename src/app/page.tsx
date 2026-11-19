@@ -11,7 +11,8 @@ import { SettingsSheet, type InstallPrompt } from "@/components/SettingsSheet";
 import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
-import { TABS, type AlertCategories, type Notice, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { TABS, type AlertCategories, type Notice, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
 import { formatDate } from "@/lib/client/time";
 import { isFreshNotice } from "@/lib/client/notices";
 
@@ -108,6 +109,12 @@ function App() {
   const [now, setNow] = useState(() => Date.now());
   const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
   const lastFetch = useRef(0);
+
+  // ---------- owner mode (PLATO + NESPA, only on the owner's devices) ----------
+  const [isOwner, setIsOwner] = useState(() => read<boolean>(KEYS.isOwner, false));
+  const [ownerData, setOwnerData] = useState<OwnerData | null>(() => (read<boolean>(KEYS.isOwner, false) ? read<OwnerData | null>(KEYS.ownerData, null) : null));
+  const [external, setExternal] = useState<SyncState["external"]>(() => read(KEYS.external, {}));
+  const [deletedTasks, setDeletedTasks] = useState<Record<string, number>>(() => read(KEYS.deletedTasks, {}));
   const seedReadSince = useRef<number | null>(boot().seedReadSince);
 
   // ---------- deep links: ?tab=notices&notice=<id> (used by push notifications) ----------
@@ -215,6 +222,82 @@ function App() {
     write(KEYS.read, [...readIds]);
   }, [readIds]);
 
+  useEffect(() => {
+    write(KEYS.external, external);
+    write(KEYS.deletedTasks, deletedTasks);
+  }, [external, deletedTasks]);
+
+  // ---------- owner mode: PLATO/NESPA data and syncing across the owner's devices ----------
+  const latest = useRef({ tasks, readIds, external, deletedTasks, isOwner });
+  // Declared before the effects below, so they always see this render's values.
+  useEffect(() => {
+    latest.current = { tasks, readIds, external, deletedTasks, isOwner };
+  });
+  const localVersion = useRef(0);
+  const applyingRemote = useRef(false);
+
+  const loadOwnerData = useCallback(async () => {
+    const result = await fetchOwnerData();
+    if (result === "not-owner") {
+      setIsOwner(false);
+      setOwnerData(null);
+      write(KEYS.isOwner, false);
+      write(KEYS.ownerData, null);
+    } else if (result) {
+      setIsOwner(true);
+      setOwnerData(result);
+      write(KEYS.isOwner, true);
+      write(KEYS.ownerData, result);
+    }
+  }, []);
+
+  /** Sends this device's tasks and read state; adopts the merged copy unless something changed meanwhile. */
+  const syncState = useCallback(async () => {
+    const cur = latest.current;
+    if (!cur.isOwner) return;
+    const version = localVersion.current;
+    const merged = await pushOwnerState({ tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external });
+    if (!merged || localVersion.current !== version) return;
+    applyingRemote.current = true;
+    setTasks(merged.tasks.map((t) => ({ ...t, source: "own" as const })));
+    setReadIds(new Set(merged.readIds));
+    setExternal(merged.external);
+    setDeletedTasks(merged.deleted);
+  }, []);
+
+  useEffect(() => {
+    const first = setTimeout(loadOwnerData, 0);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      loadOwnerData();
+      syncState();
+    };
+    const every = setInterval(() => document.visibilityState === "visible" && loadOwnerData(), 5 * 60_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadOwnerData, syncState]);
+
+  // First sync as soon as this device is known to be the owner's.
+  useEffect(() => {
+    if (isOwner) syncState();
+  }, [isOwner, syncState]);
+
+  // Local edits: send them a moment later (several quick edits go as one).
+  useEffect(() => {
+    if (applyingRemote.current) {
+      applyingRemote.current = false;
+      return;
+    }
+    localVersion.current++;
+    if (!latest.current.isOwner) return;
+    const t = setTimeout(syncState, 1500);
+    return () => clearTimeout(t);
+  }, [tasks, readIds, external, deletedTasks, syncState]);
+
   // Deadline reminders need a server-side copy of upcoming tasks — only while that alert is on.
   useEffect(() => {
     if (!alertsReady) return;
@@ -246,23 +329,68 @@ function App() {
     return next;
   }, []);
 
-  const taskActions = useMemo(
-    () => ({
+  const externalList = useMemo(() => (isOwner ? externalTasks(ownerData, external, now) : []), [isOwner, ownerData, external, now]);
+  const allTasks = useMemo(() => [...tasks, ...externalList], [tasks, externalList]);
+  const posts = useMemo(() => (isOwner ? coursePosts(ownerData) : []), [isOwner, ownerData]);
+
+  const taskActions = useMemo(() => {
+    const stamp = () => Date.now();
+    const tombstone = (ids: string[]) => setDeletedTasks((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, stamp()])) }));
+    return {
       add: (t: Omit<Task, "id" | "status" | "createdAt">) =>
-        setTasks((prev) => [{ ...t, id: `own_${Date.now().toString(36)}`, status: "pending", createdAt: Date.now() }, ...prev]),
-      update: (id: string, patch: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))),
-      toggle: (id: string) =>
-        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending" } : t))),
-      remove: (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id)),
-      clearCompleted: () => setTasks((prev) => prev.filter((t) => t.status !== "completed")),
+        setTasks((prev) => [{ ...t, id: `own_${Date.now().toString(36)}`, status: "pending", createdAt: stamp(), updatedAt: stamp(), source: "own" }, ...prev]),
+      update: (id: string, patch: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: stamp() } : t))),
+      toggle: (id: string) => {
+        // PLATO/NESPA items can't be edited, only ticked off (shared across the owner's devices).
+        if (id.startsWith("plato_") || id.startsWith("nespa_")) {
+          setExternal((prev) => ({ ...prev, [id]: { done: !prev[id]?.done, at: stamp() } }));
+          return;
+        }
+        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: t.status === "pending" ? "completed" : "pending", updatedAt: stamp() } : t)));
+      },
+      remove: (id: string) => {
+        setTasks((prev) => prev.filter((t) => t.id !== id));
+        tombstone([id]);
+      },
+      clearCompleted: () => {
+        setTasks((prev) => {
+          tombstone(prev.filter((t) => t.status === "completed").map((t) => t.id));
+          return prev.filter((t) => t.status !== "completed");
+        });
+      },
+    };
+  }, []);
+
+  const ownerActions = useMemo(
+    () => ({
+      unlock: async (key: string) => {
+        const result = await unlockOwner(key);
+        if (result === "ok") await loadOwnerData();
+        return result;
+      },
+      lock: async () => {
+        await lockOwner();
+        setIsOwner(false);
+        setOwnerData(null);
+        write(KEYS.isOwner, false);
+        write(KEYS.ownerData, null);
+      },
+      syncNow: async () => {
+        const { data, throttled } = await syncOwnerNow();
+        if (data) {
+          setOwnerData(data);
+          write(KEYS.ownerData, data);
+        }
+        return throttled;
+      },
     }),
-    [],
+    [loadOwnerData],
   );
 
   const openNotice = useCallback((id: string) => setOpenNoticeId(id), []);
   const selectedNotice = openNoticeId ? notices.find((n) => n.id === openNoticeId) ?? null : null;
   const unreadCount = useMemo(() => notices.filter((n) => !readIds.has(n.id)).length, [notices, readIds]);
-  const pendingCount = useMemo(() => tasks.filter((t) => t.status === "pending").length, [tasks]);
+  const pendingCount = useMemo(() => allTasks.filter((t) => t.status === "pending").length, [allTasks]);
 
   const content = (
     <>
@@ -272,7 +400,13 @@ function App() {
           sinceTs={sinceTs}
           notices={notices}
           readIds={readIds}
-          tasks={tasks}
+          tasks={allTasks}
+          posts={posts}
+          ownerData={isOwner ? ownerData : null}
+          onOpenPost={(post) => {
+            markRead([post.id]);
+            window.open(post.url, "_blank", "noopener,noreferrer");
+          }}
           alerts={alerts}
           alertsReady={alertsReady}
           canInstall={Boolean(installPrompt)}
@@ -299,8 +433,10 @@ function App() {
           openSettings={() => setSettingsOpen(true)}
         />
       )}
-      {tab === "tasks" && <TasksTab now={now} tasks={tasks} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />}
-      {tab === "calendar" && <CalendarTab now={now} tasks={tasks} onToggleTask={taskActions.toggle} goTo={setTab} />}
+      {tab === "tasks" && (
+        <TasksTab now={now} tasks={allTasks} synced={isOwner} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
+      )}
+      {tab === "calendar" && <CalendarTab now={now} tasks={allTasks} onToggleTask={taskActions.toggle} goTo={setTab} />}
     </>
   );
 
@@ -433,6 +569,9 @@ function App() {
         changeAlerts={changeAlerts}
         installPrompt={installPrompt}
         clearInstallPrompt={() => setInstallPrompt(null)}
+        isOwner={isOwner}
+        ownerData={ownerData}
+        ownerActions={ownerActions}
       />
     </div>
   );

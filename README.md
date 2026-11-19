@@ -68,6 +68,25 @@ Two backups are included and safe to run alongside the main trigger:
 - `.github/workflows/check-notices.yml` runs every 15 minutes. It needs the repo secrets `CRON_SECRET` and `APP_DOMAIN` (`www.pnutify.app`). GitHub delays scheduled runs and pauses them after 60 days without commits, which is why it shouldn't be the only trigger. It also **fails, and GitHub emails you, when a board has been unreadable for 3+ hours**. That usually means the university changed its page layout and `src/lib/scrapeNotices.ts` needs updating.
 - `vercel.json` adds a once-a-day Vercel Cron, the limit on the free plan.
 
+### Owner mode: PLATO and NESPA (for the site owner only)
+
+PNUtify can show **your own** PLATO deadlines and course announcements, and NESPA assignments, scores and notices. These appear in the Briefing, Tasks and Calendar and in reminders. No other visitor can see or use them.
+
+1. In Vercel, add these environment variables (mark them **Sensitive**), then redeploy:
+   - `OWNER_SECRET`: a long random key (`openssl rand -hex 32`, 32+ characters)
+   - `PLATO_ID`, `PLATO_PW`: your PLATO login
+   - `NESPA_ID`, `NESPA_PW` (optional): your NESPA login. Without it you still get NESPA deadlines and notices, but not scores.
+2. On each of your devices: **Settings → Owner sign-in** (small link at the bottom), then paste `OWNER_SECRET`.
+3. Optional: turn on **PLATO & NESPA posts** under Alerts.
+
+How it's kept private:
+- Your logins exist only in Vercel's environment variables, never in a browser or in Redis.
+- PLATO is read through Moodle's mobile API. One login gives an access key, which is stored **encrypted** in Redis and reused, so your password isn't sent again until the key expires. The NESPA session cookie is also stored encrypted.
+- An owner device holds an `httpOnly` cookie derived from `OWNER_SECRET`. Everyone else gets `401` from `/api/owner/*`. After 10 wrong keys, unlocking pauses for 15 minutes. Changing `OWNER_SECRET` signs every device out.
+- If PLATO or NESPA rejects the stored password, PNUtify waits 6 hours before trying again, so a wrong password can't get your account locked.
+- PLATO and NESPA are read every 20 minutes at most, or when you press **Sync now**.
+- Your tasks, read notices and PLATO/NESPA "done" ticks sync between your owner devices.
+
 ### Alerts on iPhone
 
 iOS only allows web push for sites added to the home screen (iOS 16.4+). The app explains this in Settings and shows the steps.
