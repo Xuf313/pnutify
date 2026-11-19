@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bell, BellOff, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Bell, BellOff, Check, ExternalLink, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn, EmptyState, Pill } from "./ui";
 import { addDays, formatDue, fromKst, kstDay, relative } from "@/lib/client/time";
 import type { AlertCategories, Task } from "@/lib/client/types";
@@ -14,7 +14,9 @@ type Actions = {
   clearCompleted: () => void;
 };
 
-type Props = { now: number; tasks: Task[]; actions: Actions; alerts: AlertCategories; openSettings: () => void };
+type Props = { now: number; tasks: Task[]; actions: Actions; alerts: AlertCategories; openSettings: () => void; /** Owner mode: tasks sync across devices. */ synced?: boolean };
+
+const isExternal = (t: Task) => t.source === "plato" || t.source === "nespa";
 
 const DAY = 86_400_000;
 
@@ -22,13 +24,13 @@ function kstTime(t: number): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t);
 }
 
-export function TasksTab({ now, tasks, actions, alerts, openSettings }: Props) {
+export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: Props) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const pending = useMemo(() => tasks.filter((t) => t.status === "pending").sort((a, b) => a.dueDate - b.dueDate), [tasks]);
   const completed = useMemo(() => tasks.filter((t) => t.status === "completed").sort((a, b) => b.dueDate - a.dueDate), [tasks]);
-  const courses = useMemo(() => [...new Set(tasks.map((t) => t.course).filter((c) => c && c !== "General"))].slice(0, 12), [tasks]);
+  const courses = useMemo(() => [...new Set(tasks.filter((t) => !isExternal(t)).map((t) => t.course).filter((c) => c && c !== "General"))].slice(0, 12), [tasks]);
 
   const groups: { label: string; items: Task[] }[] = [];
   const push = (label: string, items: Task[]) => items.length && groups.push({ label, items });
@@ -43,7 +45,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings }: Props) {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="font-pixel text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-sm font-bold text-muted-foreground">{pending.length} to do · saved on this device</p>
+          <p className="text-sm font-bold text-muted-foreground">{pending.length} to do · {synced ? "synced across your devices" : "saved on this device"}</p>
         </div>
         <button
           onClick={() => setAdding((v) => !v)}
@@ -147,7 +149,8 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
       <div className="flex-1 min-w-0">
         <p className={cn("font-bold text-foreground leading-snug", done && "line-through")}>{task.title}</p>
         <p className="text-xs font-bold text-muted-foreground mt-0.5">
-          {task.course && task.course !== "General" ? `${task.course} · ` : ""}
+          {isExternal(task) ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
+          {task.course && task.course !== "General" && task.course !== "NESPA" ? `${task.course} · ` : ""}
           {formatDue(task.dueDate, now)}
         </p>
       </div>
@@ -157,14 +160,24 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
         </Pill>
       )}
       <div className="flex shrink-0">
-        {onEdit && (
-          <button onClick={onEdit} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Edit "${task.title}"`}>
-            <Pencil size={16} />
-          </button>
+        {isExternal(task) ? (
+          task.url && (
+            <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-muted" aria-label={`Open "${task.title}" on ${task.source === "plato" ? "PLATO" : "NESPA"}`}>
+              <ExternalLink size={16} />
+            </a>
+          )
+        ) : (
+          <>
+            {onEdit && (
+              <button onClick={onEdit} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Edit "${task.title}"`}>
+                <Pencil size={16} />
+              </button>
+            )}
+            <button onClick={onDelete} className="p-1.5 rounded-md text-muted-foreground hover:text-[#E5484D] hover:bg-muted" aria-label={`Delete "${task.title}"`}>
+              <Trash2 size={16} />
+            </button>
+          </>
         )}
-        <button onClick={onDelete} className="p-1.5 rounded-md text-muted-foreground hover:text-[#E5484D] hover:bg-muted" aria-label={`Delete "${task.title}"`}>
-          <Trash2 size={16} />
-        </button>
       </div>
     </li>
   );

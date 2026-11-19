@@ -19,6 +19,12 @@ export type Task = {
   dueDate: number;
   status: 'pending' | 'completed';
   createdAt: number;
+  /** Last edit (epoch ms), used to merge the owner's devices. */
+  updatedAt?: number;
+  /** Where it came from. PLATO and NESPA items are read-only (owner mode). */
+  source?: 'own' | 'plato' | 'nespa';
+  /** Link to the item on PLATO or NESPA. */
+  url?: string;
 };
 
 export type Tab = 'briefing' | 'notices' | 'tasks' | 'calendar';
@@ -33,6 +39,28 @@ export const THEMES: { id: Theme; label: string; swatch: string }[] = [
   { id: 'night', label: 'Night', swatch: '#1B2333' },
 ];
 
-export type AlertCategories = { cse: boolean; international: boolean; tasks: boolean };
+export type AlertCategories = { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
+
+// ---------- owner mode (PLATO and NESPA, for the site owner only) ----------
+
+export type OwnerSource<T> = { configured: boolean; ok: boolean; error?: string; data?: T; syncedAt?: number };
+
+export type PlatoData = {
+  name: string;
+  courses: { id: number; name: string }[];
+  deadlines: { id: string; title: string; course: string; dueAt: number; url: string; kind: string }[];
+  announcements: { id: string; title: string; course: string; author: string; postedAt: number; url: string; excerpt: string }[];
+};
+
+export type NespaData = {
+  assignments: { id: string; no: number; title: string; opensAt: number | null; dueAt: number | null; score: string | null; url: string }[];
+  notices: { id: string; title: string; author: string; postedAt: number | null; url: string }[];
+  loggedIn: boolean;
+};
+
+export type OwnerData = { checkedAt: number; plato: OwnerSource<PlatoData>; nespa: OwnerSource<NespaData> };
+
+/** One item in the Briefing's "From your courses" list. */
+export type CoursePost = { id: string; title: string; source: 'PLATO' | 'NESPA'; course: string; postedAt: number | null; url: string; excerpt?: string };
 
 export const SOURCE_LABEL: Record<NoticeSource, string> = { cse: 'CSE', international: 'International' };

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Download, ExternalLink, Palette, Send, Share, ShieldCheck, Smartphone, SquarePlus } from "lucide-react";
+import { Bell, BookOpen, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
 import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
-import { THEMES, type AlertCategories, type Theme } from "@/lib/client/types";
+import { relative } from "@/lib/client/time";
+import { THEMES, type AlertCategories, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -18,6 +19,13 @@ type Props = {
   changeAlerts: (patch: Partial<AlertCategories>) => Promise<AlertCategories>;
   installPrompt: InstallPrompt | null;
   clearInstallPrompt: () => void;
+  isOwner: boolean;
+  ownerData: OwnerData | null;
+  ownerActions: {
+    unlock: (key: string) => Promise<"ok" | "wrong-key" | "locked" | "not-configured" | "error">;
+    lock: () => Promise<void>;
+    syncNow: () => Promise<boolean>;
+  };
 };
 
 const ALERT_ROWS: { key: keyof AlertCategories; title: string; body: string }[] = [
@@ -26,11 +34,14 @@ const ALERT_ROWS: { key: keyof AlertCategories; title: string; body: string }[] 
   { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" },
 ];
 
+const COURSE_ROW = { key: "courses" as const, title: "PLATO & NESPA posts", body: "New course announcements and NESPA notices (owner only)" };
+
 export function SettingsSheet(p: Props) {
   const [busy, setBusy] = useState<keyof AlertCategories | "test" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const support = pushSupport();
-  const anyOn = p.alerts.cse || p.alerts.international || p.alerts.tasks;
+  const anyOn = p.alerts.cse || p.alerts.international || p.alerts.tasks || p.alerts.courses;
+  const rows = p.isOwner ? [...ALERT_ROWS, COURSE_ROW] : ALERT_ROWS;
 
   const toggle = async (key: keyof AlertCategories, value: boolean) => {
     setBusy(key);
@@ -78,7 +89,7 @@ export function SettingsSheet(p: Props) {
             <p className="text-sm font-bold text-muted-foreground bg-muted rounded-lg p-3">{unsupportedText}</p>
           ) : (
             <ul className="flex flex-col divide-y-2 divide-dashed divide-border/20">
-              {ALERT_ROWS.map((row) => (
+              {rows.map((row) => (
                 <li key={row.key} className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <p className="font-bold text-foreground">{row.title}</p>
@@ -105,6 +116,9 @@ export function SettingsSheet(p: Props) {
             </p>
           )}
         </section>
+
+        {/* ---------- PLATO + NESPA (owner devices only) ---------- */}
+        {p.isOwner && <OwnerSection data={p.ownerData} actions={p.ownerActions} />}
 
         {/* ---------- install ---------- */}
         {!isStandalone() && (
@@ -195,7 +209,134 @@ export function SettingsSheet(p: Props) {
             Send feedback <ExternalLink size={11} />
           </a>
         </p>
+        {!p.isOwner && <OwnerSignIn unlock={p.ownerActions.unlock} />}
       </div>
     </Sheet>
+  );
+}
+
+function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Props["ownerActions"] }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  // Shown when the sheet opens; refreshed by the page's own clock on the next render.
+  const [now] = useState(() => Date.now());
+  const line = (label: string, src: OwnerSource<unknown> | undefined, detail: string) =>
+    !src?.configured ? `${label}: not set up (add its ID and password in Vercel)` : src.ok ? `${label}: ${detail}` : `${label}: ${src.error ?? "error"}`;
+  const plato = data?.plato;
+  const nespa = data?.nespa;
+  return (
+    <section>
+      <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+        <BookOpen size={18} className="text-primary" /> PLATO & NESPA
+      </h3>
+      <p className="text-sm text-muted-foreground mb-2">This device is signed in as the owner. Only owner devices can see this.</p>
+      <ul className="text-sm font-bold text-foreground flex flex-col gap-1.5 mb-3">
+        <li>
+          {line(
+            "PLATO",
+            plato,
+            `${plato?.data?.name ?? ""} · ${plato?.data?.courses.length ?? 0} courses · ${plato?.data?.deadlines.length ?? 0} upcoming deadlines`,
+          )}
+        </li>
+        <li>
+          {line(
+            "NESPA",
+            nespa,
+            `${nespa?.data?.assignments.length ?? 0} assignments · ${nespa?.data?.loggedIn ? "scores included" : "public list only (no scores)"}`,
+          )}
+        </li>
+        <li className="text-muted-foreground">Last checked {data?.checkedAt ? relative(data.checkedAt, now) : "never"} · refreshes every 20 minutes</li>
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        <button
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setNote(null);
+            const throttled = await actions.syncNow().catch(() => false);
+            setNote(throttled ? "Synced less than a minute ago. Try again shortly." : "Synced.");
+            setBusy(false);
+          }}
+          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 disabled:opacity-50"
+        >
+          <RefreshCw size={15} className={busy ? "animate-spin" : ""} /> Sync now
+        </button>
+        <button
+          onClick={() => {
+            if (window.confirm("Sign this device out of owner mode? PLATO and NESPA will disappear from it.")) actions.lock();
+          }}
+          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 text-[#E5484D]"
+        >
+          <LogOut size={15} /> Sign out this device
+        </button>
+      </div>
+      {note && (
+        <p role="status" className="mt-2 text-sm font-bold">
+          {note}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="self-start -mt-4 text-xs font-bold text-muted-foreground/70 hover:text-foreground flex items-center gap-1">
+        <KeyRound size={12} /> Owner sign-in
+      </button>
+    );
+  }
+  return (
+    <form
+      className="-mt-3 flex flex-col gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setNote(null);
+        const r = await unlock(key);
+        setBusy(false);
+        if (r === "ok") {
+          setKey("");
+          setNote("Signed in. PLATO and NESPA will appear in a moment.");
+        } else {
+          setNote(
+            r === "wrong-key"
+              ? "That key isn't right."
+              : r === "locked"
+                ? "Too many wrong tries. Wait 15 minutes."
+                : r === "not-configured"
+                  ? "Owner mode isn't set up on the server (OWNER_SECRET)."
+                  : "Couldn't reach the server. Try again.",
+          );
+        }
+      }}
+    >
+      <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider" htmlFor="owner-key">
+        Owner key
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="owner-key"
+          type="password"
+          autoComplete="current-password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          className="flex-1 min-w-0 rounded-xl border-2 border-border bg-background px-3 py-2 text-sm"
+        />
+        <button disabled={busy || key.length === 0} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50">
+          Sign in
+        </button>
+      </div>
+      {note && (
+        <p role="status" className="text-sm font-bold">
+          {note}
+        </p>
+      )}
+    </form>
   );
 }
