@@ -347,7 +347,7 @@ export function BriefingTab(p: Props) {
               aria-label={`${w.label}: ${plural(w.count, "deadline")}`}
             >
               <span className="text-[11px] font-bold text-muted-foreground">{w.label}</span>
-              <span className="font-serif text-lg leading-none text-foreground">{w.date}</span>
+              <span className="font-pixel text-sm font-bold text-foreground">{w.date}</span>
               <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
                 <span
                   className={cn("absolute bottom-0 inset-x-0 rounded-full", w.count ? "bg-primary" : "")}
@@ -474,7 +474,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
 function SetupCard({ icon, title, body, cta, onClick }: { icon: React.ReactNode; title: string; body: string; cta: string; onClick: () => void }) {
   return (
     <div className="cozy-card bg-card p-4 flex flex-col gap-2 border-dashed">
-      <p className="flex items-center gap-2 font-serif text-xl leading-tight text-foreground">
+      <p className="flex items-center gap-2 font-pixel font-bold text-foreground">
         <span className="text-primary">{icon}</span>
         {title}
       </p>

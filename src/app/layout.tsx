@@ -27,7 +27,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#143F90",
+  // The default theme's page background; page.tsx updates it when the theme changes.
+  themeColor: "#EEF3FD",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

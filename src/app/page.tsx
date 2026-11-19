@@ -212,6 +212,16 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     saveTheme(theme);
+    // Status bar / browser chrome colour = this theme's page background, so the top of the
+    // screen matches the header instead of showing a different colour above it.
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--t-background").trim();
+    if (bg) {
+      document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
+      const meta = document.createElement("meta");
+      meta.name = "theme-color";
+      meta.content = bg;
+      document.head.appendChild(meta);
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -447,7 +457,9 @@ function App() {
       {/* ---------- phone ---------- */}
       <div className="md:hidden flex flex-col min-h-[100dvh]">
         <header
-          className="sticky top-0 z-20 px-5 pb-3 flex items-center justify-between bg-background/95 backdrop-blur border-b-2 border-dashed border-border/20"
+          // Solid, not translucent: iOS treats an opaque bar at the top as the top bar and doesn't
+          // blur it into the status bar area (a see-through, blurred header came out fuzzy there).
+          className="sticky top-0 z-20 px-5 pb-3 flex items-center justify-between bg-background border-b-2 border-dashed border-border/20"
           style={{ paddingTop: "max(0.9rem, env(safe-area-inset-top))" }}
         >
           <div className="flex items-center gap-2.5">

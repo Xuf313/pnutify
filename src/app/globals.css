@@ -1,10 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap');
 @import 'tailwindcss';
 
 @theme inline {
   --font-sans: 'Nunito', sans-serif;
   --font-pixel: 'Pixelify Sans', monospace;
-  --font-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
 
   --color-background: var(--t-background);
   --color-foreground: var(--t-foreground);
@@ -239,21 +238,21 @@ body {
   padding: 1rem 1.15rem; color: #fff;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.18) 45%, transparent 70%);
 }
-.brief-the { font-family: var(--font-serif); font-style: italic; font-size: 1.35rem; line-height: 1; opacity: 0.92; }
+.brief-the { font-family: var(--font-pixel); font-weight: 700; font-size: 1.05rem; line-height: 1; opacity: 0.92; }
 .brief-day {
-  font-family: var(--font-serif); font-weight: 400; font-size: clamp(2.6rem, 11vw, 3.6rem);
-  line-height: 0.95; letter-spacing: -0.01em; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+  font-family: var(--font-pixel); font-weight: 700; font-size: clamp(2.1rem, 9.5vw, 3rem);
+  line-height: 1; letter-spacing: 0; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
 }
 
 .brief-blurb {
-  font-family: var(--font-serif); font-size: 1.45rem; line-height: 1.25;
+  font-family: var(--font-sans); font-weight: 800; font-size: 1.12rem; line-height: 1.4;
   margin: 1.1rem 0.25rem 0.35rem; color: var(--color-foreground); text-wrap: pretty;
 }
 .brief-caption { font-size: 0.78rem; font-style: italic; color: var(--color-muted-foreground); margin: 0 0.25rem; }
 
 .brief-section { margin-top: 2.4rem; }
 .brief-h2 {
-  font-family: var(--font-serif); font-weight: 400; font-size: 1.85rem; line-height: 1.1;
+  font-family: var(--font-pixel); font-weight: 700; font-size: 1.5rem; line-height: 1.15;
   margin: 0 0.25rem 0.9rem; color: var(--color-foreground);
 }
 .brief-h2 small { font-family: var(--font-sans); font-size: 0.8rem; font-weight: 800; color: var(--color-muted-foreground); margin-left: 0.5rem; }
@@ -266,14 +265,14 @@ body {
   box-shadow: 4px 4px 0 var(--color-border);
 }
 .brief-push__label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-primary); }
-.brief-push__topic { font-family: var(--font-serif); font-size: 1.6rem; line-height: 1.1; margin: 0.25rem 0 0.35rem; }
+.brief-push__topic { font-family: var(--font-sans); font-weight: 800; font-size: 1.3rem; line-height: 1.25; margin: 0.25rem 0 0.35rem; }
 .brief-push__text { font-size: 0.92rem; color: var(--color-muted-foreground); font-weight: 600; }
 .brief-star {
   flex-shrink: 0; width: 5.6rem; height: 5.6rem; display: grid; place-items: center; text-align: center;
   background: var(--color-primary); color: var(--color-primary-foreground);
   clip-path: polygon(50% 0%, 61% 13%, 77% 6%, 79% 23%, 96% 25%, 89% 40%, 100% 52%, 88% 63%, 93% 79%, 76% 81%, 71% 97%, 57% 89%, 44% 100%, 36% 86%, 19% 92%, 18% 75%, 2% 69%, 10% 54%, 0% 41%, 13% 31%, 9% 15%, 26% 15%, 32% 0%, 45% 9%);
   transform: rotate(-8deg); transition: transform 0.25s ease;
-  font-family: var(--font-serif); font-size: 1.1rem; line-height: 1;
+  font-family: var(--font-sans); font-weight: 800; font-size: 0.85rem; line-height: 1.1;
 }
 .brief-star:hover, .brief-star:focus-visible { transform: rotate(4deg) scale(1.05); }
 .brief-star span { display: block; }
@@ -299,12 +298,12 @@ body {
   text-align: center; padding: 1.4rem 1rem; border: 2px dashed color-mix(in srgb, var(--color-border) 35%, transparent);
   border-radius: 1rem;
 }
-.brief-alldone h3 { font-family: var(--font-serif); font-size: 1.5rem; line-height: 1.1; }
+.brief-alldone h3 { font-family: var(--font-pixel); font-weight: 700; font-size: 1.3rem; line-height: 1.1; }
 
 /* "New updates": numbered items */
 .brief-item { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.35rem; padding: 0.95rem 0.25rem; }
 .brief-item + .brief-item { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
-.brief-item__num { font-family: var(--font-serif); font-size: 1.5rem; line-height: 1.05; color: var(--color-primary); }
+.brief-item__num { font-family: var(--font-pixel); font-weight: 700; font-size: 1.25rem; line-height: 1.05; color: var(--color-primary); }
 .brief-item__title { font-weight: 800; line-height: 1.32; }
 .brief-item__title a:hover, .brief-item__title button:hover { text-decoration: underline; text-underline-offset: 3px; }
 .brief-item.is-read .brief-item__title { font-weight: 700; color: var(--color-muted-foreground); }
@@ -328,15 +327,15 @@ body {
 .brief-day-card { border: 2px solid var(--color-border); border-radius: 1rem; background: var(--color-card); overflow: hidden; }
 .brief-slot { display: grid; grid-template-columns: 5.2rem 1fr; gap: 0.75rem; padding: 0.7rem 1rem; align-items: baseline; }
 .brief-slot + .brief-slot { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
-.brief-slot__time { font-family: var(--font-serif); font-size: 1.15rem; color: var(--color-primary); }
+.brief-slot__time { font-family: var(--font-pixel); font-weight: 700; font-size: 0.95rem; color: var(--color-primary); }
 .brief-slot__event { font-weight: 800; line-height: 1.3; }
 .brief-slot__event small { display: block; font-size: 0.8rem; font-weight: 700; color: var(--color-muted-foreground); }
 .brief-part { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-muted-foreground); padding: 0.6rem 1rem 0; }
 
 /* footer */
 .brief-footer { text-align: center; margin: 3rem 0 1rem; padding-top: 1.6rem; border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 25%, transparent); }
-.brief-footer__credit { font-family: var(--font-serif); font-size: 1.15rem; line-height: 1.5; color: var(--color-muted-foreground); text-wrap: balance; }
-.brief-footer__credit em { color: var(--color-foreground); }
+.brief-footer__credit { font-family: var(--font-sans); font-weight: 700; font-size: 0.95rem; line-height: 1.5; color: var(--color-muted-foreground); text-wrap: balance; }
+.brief-footer__credit em { font-style: normal; font-weight: 800; color: var(--color-foreground); }
 .brief-footer__src { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-foreground); transform: rotate(var(--tilt, 0deg)); }
 .brief-footer__love { margin-top: 0.6rem; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; color: var(--color-muted-foreground); }
 
