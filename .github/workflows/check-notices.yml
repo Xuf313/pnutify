@@ -1,17 +1,39 @@
-name: Check for new PNU notices
+name: Check for new PNU notices (backup)
 
+# Backup trigger only. GitHub delays scheduled runs (often 10–60 min) and turns
+# them off after 60 days without repo activity, so set up an Upstash QStash or
+# cron-job.org schedule as the main trigger (see README). Running both is safe:
+# the endpoint takes a lock and never sends the same alert twice.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch: {}
+
+concurrency:
+  group: check-notices
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - name: Hit the push-check endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
         run: |
           curl --fail --silent --show-error \
-            --retry 3 --retry-delay 5 --retry-all-errors --max-time 30 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "https://${{ secrets.APP_DOMAIN }}/api/push/send"
+            --retry 3 --retry-delay 5 --retry-all-errors --max-time 70 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://${APP_DOMAIN}/api/push/send" > report.json
+          cat report.json
+      # Fails the run (and GitHub emails you) when a board has been unreadable
+      # for 3+ hours, usually because the university changed its page layout.
+      - name: Check both boards are readable
+        run: |
+          down=$(jq -r '(.boardsDown // []) | join(", ")' report.json)
+          if [ -n "$down" ]; then
+            echo "::error::Notice board(s) unreadable for 3+ hours: $down. The scraper in src/lib/scrapeNotices.ts may need updating."
+            exit 1
+          fi

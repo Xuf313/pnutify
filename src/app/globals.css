@@ -109,6 +109,25 @@
   --t-washi: #D48B68; 
 }
 
+/* ── Theme: Night (dark) ── */
+[data-theme="night"] {
+  --t-background: #121826;
+  --t-foreground: #E8ECF5;
+  --t-card: #1B2333;
+  --t-primary: #6F9BFF;
+  --t-primary-fg: #0D1424;
+  --t-secondary: #3DCB86;
+  --t-secondary-fg: #0D1424;
+  --t-accent: #8FB0FF;
+  --t-accent-fg: #0D1424;
+  --t-muted: #263044;
+  --t-muted-fg: #9AA7C2;
+  --t-border: #3A4A6B;
+  --t-grid-color: rgba(111, 155, 255, 0.06);
+  --t-washi: rgba(61, 203, 134, 0.8);
+  color-scheme: dark;
+}
+
 body {
   background-color: var(--t-background);
   color: var(--t-foreground);
@@ -119,6 +138,9 @@ body {
   background-position: -12px -12px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Break Korean between words (eojeol), not mid-word; still wrap very long URLs. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 @layer components {
@@ -167,3 +189,18 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Keyboard focus that matches the theme */
+:focus-visible {
+  outline: 2px solid var(--t-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+.sheet-backdrop { animation: fade-in 0.15s ease-out; }
+.sheet-panel { animation: slide-up 0.2s cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }

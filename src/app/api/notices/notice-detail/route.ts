@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import * as cheerio from 'cheerio';
+import { extractArticleTitle } from '@/lib/scrapeNotices';
 
-const ALLOWED_HOSTS = ['cse.pusan.ac.kr', 'international.pusan.ac.kr', 'plato.pusan.ac.kr'];
+const ALLOWED_HOSTS = ['cse.pusan.ac.kr', 'international.pusan.ac.kr'];
 
 // Listing pages sometimes link through a `?enc=<base64>` menu-context wrapper
 // instead of the direct article URL. That wrapper can 404 once the menu
@@ -36,54 +36,16 @@ export async function GET(request: Request) {
   parsed = resolveCanonicalUrl(parsed);
 
   try {
-    const res = await fetch(parsed.toString(), { cache: 'no-store' });
+    const res = await fetch(parsed.toString(), { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return NextResponse.json({ error: 'Source page unavailable', sourceUrl: parsed.toString() }, { status: 502 });
     const html = await res.text();
     if (/찾을\s*수\s*없|존재\s*하지\s*않/.test(html.slice(0, 3000))) {
       return NextResponse.json({ error: 'Source page not found', sourceUrl: parsed.toString(), title: listingTitle || null });
     }
-    // PLATO (Moodle) pages need an active login session, which this
-    // stateless fetch doesn't have — detect the login wall rather than
-    // silently extracting text from a login form.
-    if (parsed.hostname === 'plato.pusan.ac.kr') {
-      const $login = cheerio.load(html);
-      if ($login('input[type="password"]').length > 0 || html.includes('login/index.php')) {
-        return NextResponse.json({ error: 'Login required to view this page', sourceUrl: parsed.toString(), title: listingTitle || null });
-      }
-    }
-    const $ = cheerio.load(html);
-
-    // Real K2Web structure, confirmed via devtools: the full title lives in
-    // .board-view .title strong (keeps the [category] tag, matches listing style),
-    // with a clean untagged copy also sitting in a hidden #artclViewTitle input.
-    let title: string | null = null;
-
-    const heading = $('.board-view .title strong, .view.viewCont .title strong').first().text().trim().replace(/\s+/g, ' ');
-    if (heading) title = heading;
-
-    if (!title) {
-      const hidden = $('#artclViewTitle').attr('value');
-      if (hidden && hidden.trim()) title = hidden.trim();
-    }
-
-    if (!title) {
-      const prefix = listingTitle.replace(/[.\u2026]+$/, '').trim().slice(0, 15);
-      if (prefix.length >= 4) {
-        let best: string | null = null;
-        $('strong, b, h1, h2, h3, h4, h5, dt, td, div, p, li, span').each((_, el) => {
-          const text = $(el).text().trim().replace(/\s+/g, ' ');
-          if (text.startsWith(prefix) && (!best || text.length < best.length)) {
-            best = text;
-          }
-        });
-        title = best;
-      }
-    }
-
-    if (!title) title = listingTitle || null;
+    const title = extractArticleTitle(html, listingTitle) || listingTitle || null;
 
     return NextResponse.json({ title, sourceUrl: parsed.toString() });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch notice title' }, { status: 500 });
   }
 }
