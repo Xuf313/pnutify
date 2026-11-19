@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-import { ArrowRight, BellRing, BookOpen, Check, Clock, ExternalLink, Globe, Monitor, Newspaper, Smartphone, Sparkles, TriangleAlert } from "lucide-react";
-import { cn, EmptyState, Pill, SectionTitle } from "./ui";
-import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, relative } from "@/lib/client/time";
+import { useMemo, useState } from "react";
+import Image from "next/image";
+import { ArrowRight, BellRing, Check, ExternalLink, Globe, Monitor, Smartphone, TriangleAlert } from "lucide-react";
+import { cn, Pill } from "./ui";
+import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
 import { isIOS, isStandalone } from "@/lib/client/push";
+import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
 import { SOURCE_LABEL } from "@/lib/client/types";
 import { isFreshNotice } from "@/lib/client/notices";
@@ -34,6 +36,23 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
+const sourceName = (t: Task) => (t.source === "plato" ? "PLATO" : t.source === "nespa" ? "NESPA" : null);
+
+/** One entry in "New updates": a course post or a board notice. */
+type Update = {
+  id: string;
+  title: string;
+  tag: string;
+  tone: "primary" | "secondary" | "muted";
+  text: string;
+  at: number;
+  url?: string;
+  open: () => void;
+};
+
+/** The one thing most worth doing next. */
+type Push = { label: string; topic: string; text: string; cta: string; act: () => void };
+
 export function BriefingTab(p: Props) {
   const { now } = p;
   const today = kstDay(now);
@@ -42,29 +61,95 @@ export function BriefingTab(p: Props) {
   const overdue = pending.filter((t) => t.dueDate < now);
   const dueToday = pending.filter((t) => t.dueDate >= now && kstDay(t.dueDate) === today);
   const thisWeek = pending.filter((t) => t.dueDate >= now && kstDay(t.dueDate) !== today && t.dueDate < now + 7 * DAY);
-  const doneToday = p.tasks.filter((t) => t.status === "completed" && kstDay(t.dueDate) === today).length;
+  const doneToday = p.tasks.filter((t) => t.status === "completed" && kstDay(t.dueDate) === today);
 
-  const allFresh = useMemo(
+  const freshNotices = useMemo(
     () => p.notices.filter((n) => !p.readIds.has(n.id) && isFreshNotice(n, now, p.sinceTs)),
     [p.notices, p.readIds, p.sinceTs, now],
   );
-  const fresh = allFresh.slice(0, 6);
-  const freshCount = allFresh.length;
-  const newPosts = p.posts.filter((x) => !p.readIds.has(x.id) && x.postedAt !== null && now - x.postedAt < 7 * DAY);
+  const newPosts = useMemo(
+    () => p.posts.filter((x) => !p.readIds.has(x.id) && x.postedAt !== null && now - x.postedAt < 7 * DAY),
+    [p.posts, p.readIds, now],
+  );
 
-  // One calm sentence about the shape of the day.
+  // ---------- the blurb under the painting ----------
   const parts: string[] = [];
   if (overdue.length) parts.push(`${plural(overdue.length, "task")} overdue`);
   if (dueToday.length) parts.push(`${plural(dueToday.length, "deadline")} today`);
-  if (freshCount) parts.push(`${plural(freshCount, "new notice")}`);
-  if (newPosts.length) parts.push(`${plural(newPosts.length, "new course post")}`);
-  const summary =
+  if (freshNotices.length) parts.push(plural(freshNotices.length, "new notice"));
+  if (newPosts.length) parts.push(plural(newPosts.length, "new course post"));
+  const blurb =
     parts.length === 0
       ? thisWeek.length
-        ? `Nothing due today. ${plural(thisWeek.length, "deadline")} later this week.`
-        : "Nothing due and no new notices. A clear day."
-      : `${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
+        ? `Nothing due today, and ${plural(thisWeek.length, "deadline")} later this week. A good day to get ahead.`
+        : "Nothing due and nothing new. Today is yours to spend however you like."
+      : `${greeting(now)}. You have ${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
 
+  // ---------- "Push your work forward" ----------
+  const openTask = (t: Task) => () => (t.url ? window.open(t.url, "_blank", "noopener,noreferrer") : p.goTo("tasks"));
+  const nextUp = overdue[0] ?? pending.find((t) => t.dueDate >= now && t.dueDate < now + 2 * DAY);
+  const push: Push | null = nextUp
+    ? {
+        label: nextUp.dueDate < now ? "Catch up" : "Next deadline",
+        topic: nextUp.title,
+        text: [
+          sourceName(nextUp),
+          nextUp.course && nextUp.course !== "General" && nextUp.course !== "NESPA" ? nextUp.course : null,
+          nextUp.dueDate < now ? `was due ${relative(nextUp.dueDate, now)}` : `due ${formatDue(nextUp.dueDate, now)} (${relative(nextUp.dueDate, now)})`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        cta: nextUp.url ? "Open it" : "Let's do it",
+        act: openTask(nextUp),
+      }
+    : newPosts[0]
+      ? {
+          label: `New from ${newPosts[0].source}`,
+          topic: newPosts[0].title,
+          text: newPosts[0].excerpt || [newPosts[0].course, newPosts[0].postedAt ? relative(newPosts[0].postedAt, now) : ""].filter(Boolean).join(" · "),
+          cta: "Read it",
+          act: () => p.onOpenPost(newPosts[0]),
+        }
+      : null;
+
+  // ---------- to-dos: overdue, today, then the rest of the week ----------
+  const todos = [...overdue, ...dueToday, ...thisWeek].slice(0, 6);
+
+  // ---------- "New updates" ----------
+  const updates: Update[] = useMemo(() => {
+    const fromPosts: Update[] = newPosts.map((x) => ({
+      id: x.id,
+      title: x.title,
+      tag: x.source === "PLATO" ? x.course || "PLATO" : "NESPA",
+      tone: x.source === "PLATO" ? "secondary" : "muted",
+      text: x.excerpt || `${x.source}${x.course && x.course !== x.source ? ` · ${x.course}` : ""}`,
+      at: x.postedAt ?? 0,
+      url: x.url,
+      open: () => p.onOpenPost(x),
+    }));
+    const fromNotices: Update[] = freshNotices.map((n) => ({
+      id: n.id,
+      title: n.title,
+      tag: SOURCE_LABEL[n.source],
+      tone: "primary",
+      text: `${n.source === "cse" ? "정보컴퓨터공학부" : "국제처"} board · posted ${n.date}`,
+      at: n.firstSeenAt,
+      url: n.url,
+      open: () => p.onOpenNotice(n.id),
+    }));
+    return [...fromPosts, ...fromNotices].sort((a, b) => b.at - a.at).slice(0, 7);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newPosts, freshNotices]);
+
+  // ---------- "Your day": today's deadlines by time ----------
+  const todayAll = [...dueToday, ...doneToday.filter((t) => t.dueDate >= now - 12 * 3600_000)].sort((a, b) => a.dueDate - b.dueDate);
+  const dayParts = [
+    { label: "Morning", items: todayAll.filter((t) => kstHour(t.dueDate) < 12) },
+    { label: "Afternoon", items: todayAll.filter((t) => kstHour(t.dueDate) >= 12 && kstHour(t.dueDate) < 18) },
+    { label: "Evening", items: todayAll.filter((t) => kstHour(t.dueDate) >= 18) },
+  ].filter((x) => x.items.length > 0);
+
+  // ---------- looking ahead ----------
   const week = Array.from({ length: 7 }, (_, i) => {
     const day = addDays(today, i);
     const count = pending.filter((t) => kstDay(t.dueDate) === day).length;
@@ -75,54 +160,185 @@ export function BriefingTab(p: Props) {
   const alertsOff = p.alertsReady && !p.alerts.cse && !p.alerts.international && !p.alerts.tasks;
   const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
-  return (
-    <div className="flex flex-col gap-7 pb-4">
-      {/* ---------- hero ---------- */}
-      <section className="cozy-card bg-primary text-primary-foreground p-5 relative overflow-hidden -rotate-[0.4deg]">
-        <div className="absolute -right-6 -top-6 opacity-15" aria-hidden>
-          <Sparkles size={120} />
-        </div>
-        <p className="font-pixel text-sm font-bold opacity-80">{formatDate(now, { weekday: "long", month: "long", day: "numeric" })}</p>
-        <h1 className="font-pixel text-3xl font-bold leading-tight mt-1">{greeting(now)}!</h1>
-        <p className="font-bold mt-2 text-[15px] leading-snug max-w-md">{summary}</p>
-        <div className="flex flex-wrap gap-2 mt-4">
-          <Stat label="Due today" value={dueToday.length + overdue.length} />
-          <Stat label="This week" value={thisWeek.length} />
-          <Stat label="New notices" value={freshCount} />
-        </div>
-      </section>
+  const painting = paintingOfTheDay(now);
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
+  const weekday = formatDate(now, { weekday: "long" });
+  // "19 NOV 2026", in Korea time.
+  const edgeDate = [formatDate(now, { day: "2-digit" }), formatDate(now, { month: "short" }).toUpperCase(), formatDate(now, { year: "numeric" })].join(" ");
+  const edgeTime = formatDate(now, { hour: "2-digit", minute: "2-digit", hour12: true });
 
-      {/* ---------- deadlines ---------- */}
-      <section>
-        <SectionTitle
-          icon={<Clock size={18} />}
-          action={
-            <button onClick={() => p.goTo("tasks")} className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
-              All tasks <ArrowRight size={14} />
-            </button>
-          }
-        >
-          Coming up
-        </SectionTitle>
-        {overdue.length + dueToday.length + thisWeek.length === 0 ? (
-          <EmptyState title={doneToday ? "All done for today 🎉" : "No deadlines this week"}>
-            <button onClick={() => p.goTo("tasks")} className="font-bold text-primary hover:underline">
+  const problems = p.ownerData ? ([p.ownerData.plato, p.ownerData.nespa].map((s) => s.error).filter(Boolean) as string[]) : [];
+  const sources = [
+    p.ownerData?.plato.configured && "PLATO",
+    p.ownerData?.nespa.configured && "NESPA",
+    "CSE",
+    "International",
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="brief pb-4">
+      {/* ---------- hero: the painting of the day ---------- */}
+      <header>
+        <div className="brief-edges" aria-hidden>
+          <span>{edgeDate}</span>
+          <span>{edgeTime}</span>
+        </div>
+        <figure className="brief-frame">
+          <div className="brief-frame__canvas">
+            <Image
+              key={painting.slug}
+              src={`/paintings/${painting.slug}.jpg`}
+              alt=""
+              fill
+              priority
+              sizes="(min-width: 768px) 640px, 100vw"
+              className={cn(loadedSlug === painting.slug && "is-loaded")}
+              style={{ objectPosition: painting.focus ?? "50% 50%" }}
+              onLoad={() => setLoadedSlug(painting.slug)}
+            />
+            <div className="brief-frame__overlay">
+              <span className="brief-the">The</span>
+              <h1 className="brief-day">{weekday} Brief</h1>
+            </div>
+          </div>
+        </figure>
+        <p className="brief-blurb">{blurb}</p>
+        <p className="brief-caption">{paintingCaption(painting)}</p>
+      </header>
+
+      {problems.map((msg) => (
+        <p key={msg} className="mt-4 text-xs font-bold text-[#E5484D] flex items-start gap-1.5">
+          <TriangleAlert size={14} className="shrink-0 mt-px" /> {msg}
+        </p>
+      ))}
+
+      {/* ---------- push your work forward ---------- */}
+      {push && (
+        <section className="brief-push" aria-label="Push your work forward">
+          <div className="flex-1 min-w-0">
+            <p className="brief-push__label">Push your work forward · {push.label}</p>
+            <h2 className="brief-push__topic">{push.topic}</h2>
+            <p className="brief-push__text">{push.text}</p>
+          </div>
+          <button onClick={push.act} className="brief-star" aria-label={`${push.cta}: ${push.topic}`}>
+            <span>
+              {push.cta}
+              <br />→
+            </span>
+          </button>
+        </section>
+      )}
+
+      {/* ---------- to-dos ---------- */}
+      <section className="brief-section">
+        <h2 className="brief-h2">
+          To-dos
+          {pending.length > 0 && <small>{plural(pending.length, "open task")}</small>}
+        </h2>
+        {todos.length > 0 ? (
+          <div>
+            {todos.map((t) => (
+              <TodoItem key={t.id} task={t} now={now} onToggle={p.onToggleTask} />
+            ))}
+            {pending.length > todos.length && (
+              <button onClick={() => p.goTo("tasks")} className="mt-2 ml-1 text-sm font-bold text-primary flex items-center gap-1 hover:underline">
+                {plural(pending.length - todos.length, "more task")} <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
+        ) : doneToday.length > 0 ? (
+          <div className="brief-alldone">
+            <p className="text-3xl" aria-hidden>
+              🎉
+            </p>
+            <h3>You completed all your to-dos!</h3>
+            <p className="text-sm font-bold text-muted-foreground mt-1">Nice work. The day is yours.</p>
+          </div>
+        ) : (
+          <p className="mx-1 text-sm font-bold text-muted-foreground">
+            Nothing due this week.{" "}
+            <button onClick={() => p.goTo("tasks")} className="text-primary hover:underline">
               Add an assignment or exam
             </button>{" "}
-            and PNUtify will remind you before it&apos;s due.
-          </EmptyState>
-        ) : (
-          <ul className="flex flex-col gap-2.5">
-            {[...overdue, ...dueToday, ...thisWeek].slice(0, 6).map((t) => (
-              <TaskRow key={t.id} task={t} now={now} onToggle={p.onToggleTask} />
-            ))}
-          </ul>
+            and you&apos;ll get a reminder before it&apos;s due.
+          </p>
         )}
       </section>
 
-      {/* ---------- week strip ---------- */}
-      <section aria-label="Deadlines over the next 7 days">
-        <div className="cozy-card bg-card p-3 grid grid-cols-7 gap-1">
+      {/* ---------- new updates ---------- */}
+      <section className="brief-section">
+        <h2 className="brief-h2">New updates</h2>
+        {updates.length === 0 ? (
+          <p className="mx-1 text-sm font-bold text-muted-foreground">
+            You&apos;re all caught up.{" "}
+            <button onClick={() => p.goTo("notices")} className="text-primary hover:underline">
+              See all notices
+            </button>
+          </p>
+        ) : (
+          <div>
+            {updates.map((u, i) => (
+              <article key={u.id} className="brief-item">
+                <span className="brief-item__num">{String(i + 1).padStart(2, "0")}</span>
+                <div className="min-w-0">
+                  <h3 className="brief-item__title">
+                    <button onClick={u.open} className="text-left">
+                      {u.title}
+                    </button>
+                    <span className={cn("brief-tag", u.tone === "primary" && "brief-tag--primary", u.tone === "secondary" && "brief-tag--secondary")}>{u.tag}</span>
+                  </h3>
+                  <p className="brief-item__text">
+                    {u.text}
+                    {u.url && (
+                      <a
+                        href={u.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="brief-source"
+                        style={{ ["--tilt" as string]: `${(i % 3) - 1.5}deg` }}
+                        aria-label={`Open "${u.title}" on the original site`}
+                      >
+                        {u.tag === "CSE" ? <Monitor size={11} /> : u.tag === "International" ? <Globe size={11} /> : <ExternalLink size={11} />}
+                      </a>
+                    )}
+                  </p>
+                </div>
+              </article>
+            ))}
+            <button onClick={() => p.goTo("notices")} className="mt-1 ml-1 text-sm font-bold text-primary flex items-center gap-1 hover:underline">
+              All notices <ArrowRight size={14} />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ---------- your day ---------- */}
+      {dayParts.length > 0 && (
+        <section className="brief-section">
+          <h2 className="brief-h2">Your day</h2>
+          <div className="brief-day-card">
+            {dayParts.map((part) => (
+              <div key={part.label}>
+                <p className="brief-part">{part.label}</p>
+                {part.items.map((t) => (
+                  <div key={t.id} className="brief-slot">
+                    <span className="brief-slot__time">{formatDate(t.dueDate, { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                    <span className={cn("brief-slot__event", t.status === "completed" && "line-through opacity-55")}>
+                      {t.title}
+                      <small>{[sourceName(t), t.course !== "General" && t.course !== "NESPA" ? t.course : null, "deadline"].filter(Boolean).join(" · ")}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ---------- looking ahead ---------- */}
+      <section className="brief-section">
+        <h2 className="brief-h2">Looking ahead</h2>
+        <div className="cozy-card bg-card p-3 grid grid-cols-7 gap-1 text-center">
           {week.map((w, i) => (
             <button
               key={w.day}
@@ -131,7 +347,7 @@ export function BriefingTab(p: Props) {
               aria-label={`${w.label}: ${plural(w.count, "deadline")}`}
             >
               <span className="text-[11px] font-bold text-muted-foreground">{w.label}</span>
-              <span className="font-pixel text-sm font-bold text-foreground">{w.date}</span>
+              <span className="font-serif text-lg leading-none text-foreground">{w.date}</span>
               <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
                 <span
                   className={cn("absolute bottom-0 inset-x-0 rounded-full", w.count ? "bg-primary" : "")}
@@ -143,55 +359,14 @@ export function BriefingTab(p: Props) {
         </div>
       </section>
 
-      {/* ---------- PLATO + NESPA (owner mode) ---------- */}
-      {p.ownerData && <CourseSection data={p.ownerData} posts={p.posts} readIds={p.readIds} now={now} onOpen={p.onOpenPost} />}
-
-      {/* ---------- notices ---------- */}
-      <section>
-        <SectionTitle
-          icon={<Newspaper size={18} />}
-          action={
-            <button onClick={() => p.goTo("notices")} className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
-              All notices <ArrowRight size={14} />
-            </button>
-          }
-        >
-          New for you
-        </SectionTitle>
-        {fresh.length === 0 ? (
-          <EmptyState title="You're all caught up">No new CSE or International notices since your last visit.</EmptyState>
-        ) : (
-          <ul className="flex flex-col gap-2.5">
-            {fresh.map((n) => (
-              <li key={n.id}>
-                <button onClick={() => p.onOpenNotice(n.id)} className="cozy-card interactive bg-card w-full text-left p-3.5 flex gap-3 items-start">
-                  <span className="w-9 h-9 rounded-xl bg-background border-2 border-border flex items-center justify-center shrink-0" aria-hidden>
-                    {n.source === "cse" ? <Monitor size={16} className="text-secondary" /> : <Globe size={16} className="text-primary" />}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block font-bold text-foreground leading-snug line-clamp-2">{n.title}</span>
-                    <span className="flex items-center gap-2 mt-1.5">
-                      <Pill tone="primary">New</Pill>
-                      <span className="text-xs font-bold text-muted-foreground">
-                        {SOURCE_LABEL[n.source]} · {n.date}
-                      </span>
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
       {/* ---------- get set up ---------- */}
       {(alertsOff || showInstall) && (
-        <section className="grid gap-3 sm:grid-cols-2">
+        <section className="brief-section grid gap-3 sm:grid-cols-2">
           {alertsOff && (
             <SetupCard
               icon={<BellRing size={20} />}
               title="Get alerts"
-              body="A ping when a new CSE or International notice goes up, and a reminder before your deadlines."
+              body="A ping when a new notice goes up, and a reminder before your deadlines."
               cta="Turn on alerts"
               onClick={p.openSettings}
             />
@@ -207,67 +382,54 @@ export function BriefingTab(p: Props) {
           )}
         </section>
       )}
+
+      {/* ---------- footer ---------- */}
+      <footer className="brief-footer">
+        <p className="brief-footer__credit">
+          Made for you by <em>PNUtify</em> using <em>your</em>{" "}
+          {sources.map((s, i) => (
+            <span key={s}>
+              <span className="brief-footer__src" style={{ ["--tilt" as string]: `${(i % 2 ? 1 : -1) * 0.8}deg` }}>
+                {s}
+              </span>
+              {i < sources.length - 2 ? ", " : i === sources.length - 2 ? " and " : "."}
+            </span>
+          ))}
+        </p>
+        <p className="brief-footer__love">With love from a PNU student, for PNU students</p>
+      </footer>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function TodoItem({ task, now, onToggle }: { task: Task; now: number; onToggle: (id: string) => void }) {
+  const done = task.status === "completed";
+  const overdue = !done && task.dueDate < now;
+  const src = sourceName(task);
   return (
-    <span className="bg-primary-foreground/15 border-2 border-primary-foreground/30 rounded-xl px-3 py-1.5 flex items-baseline gap-1.5">
-      <span className="font-pixel text-xl font-bold tabular-nums">{value}</span>
-      <span className="text-xs font-bold opacity-85">{label}</span>
-    </span>
-  );
-}
-
-function CourseSection({ data, posts, readIds, now, onOpen }: { data: OwnerData; posts: CoursePost[]; readIds: Set<string>; now: number; onOpen: (p: CoursePost) => void }) {
-  const recent = posts.filter((x) => x.postedAt === null || now - x.postedAt < 14 * DAY).slice(0, 6);
-  const problems = [data.plato, data.nespa].map((s) => s.error).filter(Boolean) as string[];
-  const status = [
-    data.plato.configured && `PLATO ${data.plato.syncedAt ? relative(data.plato.syncedAt, now) : "not synced yet"}`,
-    data.nespa.configured && `NESPA ${data.nespa.syncedAt ? relative(data.nespa.syncedAt, now) : "not synced yet"}`,
-  ].filter(Boolean);
-  return (
-    <section>
-      <SectionTitle icon={<BookOpen size={18} />}>From your courses</SectionTitle>
-      {status.length > 0 && <p className="text-xs font-bold text-muted-foreground -mt-1 mb-2">Synced: {status.join(" · ")}</p>}
-      {problems.map((msg) => (
-        <p key={msg} className="text-xs font-bold text-[#E5484D] flex items-start gap-1.5 mb-2">
-          <TriangleAlert size={14} className="shrink-0 mt-px" /> {msg}
+    <div className={cn("brief-todo", done && "is-done")}>
+      <button
+        role="checkbox"
+        aria-checked={done}
+        onClick={() => onToggle(task.id)}
+        className="brief-check"
+        aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
+      >
+        {done && <Check size={14} strokeWidth={3.5} />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="brief-todo__label">{task.title}</p>
+        <p className="brief-todo__ctx">
+          {[src, task.course && task.course !== "General" && task.course !== "NESPA" ? task.course : null, formatDue(task.dueDate, now)].filter(Boolean).join(" · ")}
+          {overdue && <span className="text-[#E5484D]"> · overdue</span>}
         </p>
-      ))}
-      {recent.length === 0 ? (
-        <EmptyState title="No new course posts">PLATO announcements and NESPA notices from the last two weeks show up here.</EmptyState>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {recent.map((x) => {
-            const isRead = readIds.has(x.id);
-            return (
-              <li key={x.id}>
-                <button
-                  onClick={() => onOpen(x)}
-                  className={cn("cozy-card interactive bg-card w-full text-left p-3.5 flex gap-3 items-start", isRead && "opacity-65 border-dashed shadow-none")}
-                >
-                  <span className="flex-1 min-w-0">
-                    <span className="block font-bold text-foreground leading-snug line-clamp-2">{x.title}</span>
-                    {x.excerpt && <span className="block text-sm text-muted-foreground line-clamp-1 mt-0.5">{x.excerpt}</span>}
-                    <span className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                      {!isRead && <Pill tone="primary">New</Pill>}
-                      <Pill tone={x.source === "PLATO" ? "secondary" : "muted"}>{x.source}</Pill>
-                      <span className="text-xs font-bold text-muted-foreground">
-                        {x.course && x.course !== x.source ? `${x.course} · ` : ""}
-                        {x.postedAt ? relative(x.postedAt, now) : ""}
-                      </span>
-                    </span>
-                  </span>
-                  <ExternalLink size={15} className="text-muted-foreground shrink-0 mt-1" aria-hidden />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      </div>
+      {task.url && (
+        <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-1 text-muted-foreground hover:text-primary" aria-label={`Open "${task.title}"`}>
+          <ExternalLink size={15} />
+        </a>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -290,7 +452,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
       <div className="flex-1 min-w-0">
         <p className={cn("font-bold text-foreground leading-snug truncate", done && "line-through")}>{task.title}</p>
         <p className="text-xs font-bold text-muted-foreground mt-0.5 truncate">
-          {task.source === "plato" || task.source === "nespa" ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
+          {sourceName(task) ? `${sourceName(task)} · ` : ""}
           {task.course && task.course !== "General" && task.course !== "NESPA" ? `${task.course} · ` : ""}
           {formatDue(task.dueDate, now)}
         </p>
@@ -312,7 +474,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
 function SetupCard({ icon, title, body, cta, onClick }: { icon: React.ReactNode; title: string; body: string; cta: string; onClick: () => void }) {
   return (
     <div className="cozy-card bg-card p-4 flex flex-col gap-2 border-dashed">
-      <p className="flex items-center gap-2 font-pixel font-bold text-foreground">
+      <p className="flex items-center gap-2 font-serif text-xl leading-tight text-foreground">
         <span className="text-primary">{icon}</span>
         {title}
       </p>
