@@ -49,7 +49,7 @@ export function Pill({ children, tone = "muted", className }: { children: ReactN
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 font-pixel text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border-2",
+        "inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-md border-2",
         tone === "muted" && "bg-muted text-muted-foreground border-transparent",
         tone === "primary" && "bg-primary text-primary-foreground border-border",
         tone === "secondary" && "bg-secondary text-secondary-foreground border-border",

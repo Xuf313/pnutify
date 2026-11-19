@@ -27,10 +27,12 @@ export async function withLock<T>(redis: Redis, key: string, ttlSeconds: number,
   try {
     return await fn();
   } finally {
-    const current = await redis.get<string>(key).catch(() => null);
-    if (current === token) await redis.del(key).catch(() => {});
+    // Delete only our own lock (it may have expired and been taken by another run), in one call.
+    await redis.eval(RELEASE_LOCK, [key], [token]).catch(() => {});
   }
 }
+
+export const RELEASE_LOCK = 'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
 
 export const DEVICE_TTL_SECONDS = 45 * 24 * 60 * 60;
 
@@ -41,10 +43,12 @@ export const KEYS = {
   tasks: (id: string) => `tasks:list:${id}`,
   notifiedDeadlines: (id: string) => `push:notified-deadlines:${id}`,
   latestNotices: 'notices:latest',
+  checkedAt: 'notices:checked-at',
   firstSeen: 'notices:first-seen',
+  fullTitles: 'notices:full-titles',
+  deadlinesCheckedAt: 'push:deadlines-checked-at',
   pushedNotices: 'push:pushed-notice-ids',
   legacySeen: 'push:seen-ids',
-  refreshLock: 'lock:notices-refresh',
   runLock: 'lock:push-run',
 } as const;
 

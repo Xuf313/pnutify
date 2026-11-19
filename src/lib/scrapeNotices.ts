@@ -14,11 +14,18 @@ export type ScrapedNotice = {
   pinned: boolean;
 };
 
-type Board = { source: NoticeSource; url: string; origin: string; idPrefix: string };
+type Board = {
+  source: NoticeSource;
+  url: string;
+  origin: string;
+  idPrefix: string;
+  /** The list cuts titles at this many characters, with no ellipsis and no full copy in the HTML. */
+  titleCut: number;
+};
 
 export const BOARDS: Board[] = [
-  { source: 'cse', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse' },
-  { source: 'international', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl' },
+  { source: 'cse', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse', titleCut: 50 },
+  { source: 'international', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl', titleCut: 60 },
 ];
 
 // Rolling window instead of a hard-coded semester date, so the app keeps
@@ -249,6 +256,74 @@ export async function scrapeBoard(board: Board, now = Date.now()): Promise<Board
 
 export async function scrapeAllBoards(now = Date.now()): Promise<BoardResult[]> {
   return Promise.all(BOARDS.map((b) => scrapeBoard(b, now)));
+}
+
+export type FirstPageResult = { source: NoticeSource; ok: boolean; ids: string[] };
+
+/**
+ * Cheap change check: page 1 of a board only, returning the ids a full scrape
+ * would keep (pinned posts, and regular posts inside the window). One request
+ * per board, so it can run every minute without loading the university sites.
+ */
+export async function scrapeFirstPage(board: Board, now = Date.now()): Promise<FirstPageResult> {
+  const html = await fetchHtml(board.url);
+  if (html === null) return { source: board.source, ok: false, ids: [] };
+  const { notices } = parseBoardPage(html, board);
+  if (notices.length === 0) return { source: board.source, ok: false, ids: [] };
+  const cutoff = now - WINDOW_DAYS * DAY_MS;
+  const ids = notices.filter((n) => n.pinned || n.postedAt === null || n.postedAt >= cutoff).map((n) => n.id);
+  return { source: board.source, ok: true, ids };
+}
+
+export async function checkFirstPages(now = Date.now()): Promise<FirstPageResult[]> {
+  return Promise.all(BOARDS.map((b) => scrapeFirstPage(b, now)));
+}
+
+/**
+ * True when the board may have cut this title off (see Board.titleCut), so the
+ * full one should be read from the article page. One character of slack: a
+ * cut that lands on a space loses it when the title is trimmed.
+ */
+export function mayBeCutOff(n: Pick<ScrapedNotice, 'title' | 'source'>): boolean {
+  const board = BOARDS.find((b) => b.source === n.source);
+  return board !== undefined && n.title.length >= board.titleCut - 1;
+}
+
+/** Full title from an article page, or null. Prefers the untagged hidden copy, which matches the list style. */
+export function extractArticleTitle(html: string, listingTitle = ''): string | null {
+  const $ = cheerio.load(html);
+  const hidden = ($('#artclViewTitle').attr('value') || '').replace(/\s+/g, ' ').trim();
+  const heading = $('.board-view .title strong, .view.viewCont .title strong').first().text().replace(/\s+/g, ' ').trim();
+  let title = hidden || heading || null;
+
+  if (!title && listingTitle) {
+    const prefix = listingTitle.replace(/[.…]+$/, '').trim().slice(0, 15);
+    if (prefix.length >= 4) {
+      let best: string | null = null;
+      $('strong, b, h1, h2, h3, h4, h5, dt, td, div, p, li, span').each((_, el) => {
+        const text = $(el).text().trim().replace(/\s+/g, ' ');
+        if (text.startsWith(prefix) && (!best || text.length < best.length)) best = text;
+      });
+      title = best;
+    }
+  }
+  return title ? cleanTitle(title) : null;
+}
+
+/**
+ * Full title for a notice whose listed title may be cut off. Returns the
+ * listed title when the article page can't be read or doesn't agree with it.
+ */
+export async function fetchFullTitle(n: Pick<ScrapedNotice, 'title' | 'url'>): Promise<{ ok: boolean; title: string }> {
+  const html = await fetchHtml(n.url);
+  if (html === null) return { ok: false, title: n.title };
+  const full = extractArticleTitle(html, n.title);
+  const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+  // The article title must contain the listed one; otherwise keep what we had.
+  if (full && full.length > n.title.length && squash(full).includes(squash(n.title).slice(0, 30))) {
+    return { ok: true, title: full };
+  }
+  return { ok: true, title: n.title };
 }
 
 /** Newest first; pinned notices stay in date order with everything else. */

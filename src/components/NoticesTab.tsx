@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Bell, BellOff, CheckCheck, Globe, Monitor, Pin, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
 import { cn, EmptyState, Pill } from "./ui";
-import { isNewNotice } from "./BriefingTab";
+import { isNewNotice } from "@/lib/client/notices";
 import { relative } from "@/lib/client/time";
 import type { AlertCategories, Notice, NoticeSource } from "@/lib/client/types";
 import { SOURCE_LABEL } from "@/lib/client/types";
@@ -65,7 +65,7 @@ export function NoticesTab(p: Props) {
           <button
             onClick={p.openSettings}
             className={cn(
-              "cozy-btn flex items-center gap-1.5 px-3 py-1.5 font-pixel text-xs font-bold",
+              "cozy-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold",
               alertOn ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
             )}
           >
@@ -85,7 +85,7 @@ export function NoticesTab(p: Props) {
               setLimit(PAGE);
             }}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl font-pixel text-sm font-bold border-2 transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-extrabold border-2 transition-all",
               filter === f
                 ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-0.5"
                 : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted",
@@ -121,7 +121,7 @@ export function NoticesTab(p: Props) {
         <button
           onClick={() => setUnreadOnly((v) => !v)}
           aria-pressed={unreadOnly}
-          className={cn("cozy-btn px-3 py-2 font-pixel text-xs font-bold", unreadOnly ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}
+          className={cn("cozy-btn px-3 py-2 text-xs font-extrabold", unreadOnly ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}
         >
           Unread
         </button>
@@ -196,7 +196,7 @@ export function NoticesTab(p: Props) {
       )}
 
       {filtered.length > limit && (
-        <button onClick={() => setLimit((l) => l + PAGE)} className="cozy-btn bg-card font-pixel font-bold py-2.5 text-sm">
+        <button onClick={() => setLimit((l) => l + PAGE)} className="cozy-btn bg-card font-extrabold py-2.5 text-sm">
           Show {Math.min(PAGE, filtered.length - limit)} more
         </button>
       )}

@@ -10,21 +10,29 @@ Live at **https://www.pnutify.app**. Add it to your home screen to use it like a
 - **Notices:** the CSE (정보컴퓨터공학부) and International (국제처) boards, merged and de-duplicated, with search, unread filter, "New" and "Pinned" badges, mark-all-read and share.
 - **Tasks:** your own assignments and exams with due dates in KST, grouped into Overdue, Today, This week and Later.
 - **Calendar:** a month view of your deadlines.
-- **Alerts:** web push for new CSE or International notices, and reminders 24 hours and 1 hour before a task is due. Each category can be turned on or off on its own, and you can send yourself a test alert.
+- **Alerts:** web push for new CSE or International notices, usually within a minute or two of posting, and reminders 24 hours and 1 hour before a task is due. Each category can be turned on or off on its own, and you can send yourself a test alert.
 - Installable PWA with 5 themes, including a dark Night theme.
 
 ## How it works
 
 ```
-cron (QStash / cron-job.org / GitHub Actions / Vercel Cron)
+cron, every minute (cron-job.org; GitHub Actions and Vercel Cron as backups)
    │  GET /api/push/send   Authorization: Bearer $CRON_SECRET
    ▼
-scrape both boards ──► Redis snapshot "notices:latest" ◄── GET /api/notices (every visitor)
+check page 1 of both boards ── nothing new ──► done (1 request per board, ~5 Redis commands)
+   │ new post, or 30 min since the last full read
+   ▼
+read every page ──► Redis snapshot "notices:latest" ◄── GET /api/notices (every visitor)
    │
-   └─► new notices + due tasks ──► web push to subscribed devices
+   └─► new notices + due tasks ──► web push ──► open app refreshes at once
 ```
 
-- Visitors read one shared snapshot from Redis, so page views never hit the university servers.
+- **How fast alerts arrive.** The university boards can't notify anyone, so PNUtify checks them. Every run reads only page 1 of each board, which is enough to spot a new post. A new post triggers a full read and the push right away, so with a one-minute schedule an alert arrives about 1–2 minutes after posting. Every 30 minutes all pages are re-read anyway, to pick up edits and removals.
+- **Light on the university servers.** One request per board per minute, about what one student refreshing the page would cause.
+- **Light on Redis.** A run with nothing new uses about 5 Redis commands, and device data is read in one batch. Checking every minute fits the Upstash free tier.
+- Visitors read one shared snapshot from Redis, so page views never hit the university servers. An open app refreshes every minute, and immediately when a push arrives.
+- The board lists cut long titles off (60 characters on International, 50 on CSE) without an ellipsis. Those titles are completed from the article page and remembered, so lists and alerts show the full title.
+- On a first visit, notices that aren't new are marked read, so a new student sees the handful of new notices instead of 100+ unread ones.
 - Each notice gets a stable id: the article number, or a hash of title and date when there is none. Pinned posts are taken from page 1 only. Paging stops when a board repeats a page. Together these remove the duplicate notices.
 - If a board is down, its last known notices are kept, so they don't vanish and later come back as "new".
 - A notice is pushed at most once, and only while it's fresh (seen in the last day, posted in the last 3). Overlapping cron calls are locked out.
@@ -43,14 +51,21 @@ On Vercel, add the same variables under **Project → Settings → Environment V
 
 ### Scheduling the notice check
 
-The endpoint is `GET` or `POST https://www.pnutify.app/api/push/send` with the header `Authorization: Bearer <CRON_SECRET>`. Pick one main trigger that runs every 5–10 minutes:
+The endpoint is `GET` or `POST https://www.pnutify.app/api/push/send` with the header `Authorization: Bearer <CRON_SECRET>`. Alerts are only as fast as this schedule, so set up one main trigger that runs **every minute**:
 
-- **Upstash QStash (recommended, same account as Redis):** go to Console → QStash → Schedules → Create. Set the destination to `https://www.pnutify.app/api/push/send`, the cron to `*/10 * * * *`, and the header to `Authorization: Bearer <CRON_SECRET>`.
-- **cron-job.org (free):** create a job with the same URL, every 10 minutes, and the same header under Advanced → Headers.
+- **cron-job.org (recommended, free, allows every minute):**
+  1. Sign up at cron-job.org and choose **Create cronjob**.
+  2. URL: `https://www.pnutify.app/api/push/send`. Schedule: every 1 minute.
+  3. Under **Advanced → Headers**, add `Authorization` with the value `Bearer <CRON_SECRET>`.
+  4. Turn on failure notifications, so you hear about it if the site stops answering.
+  5. Save, then use **Test run**. The response should be JSON with `"ok": true`.
+- **Upstash QStash** also works (Console → QStash → Schedules, same URL and header). Check its free-tier daily message limit first: every minute is 1,440 calls a day, so you may need every 2 minutes.
+
+The endpoint takes a lock, so overlapping calls are safe and never send the same alert twice.
 
 Two backups are included and safe to run alongside the main trigger:
 
-- `.github/workflows/check-notices.yml` runs every 15 minutes. It needs the repo secrets `CRON_SECRET` and `APP_DOMAIN` (`www.pnutify.app`). GitHub delays scheduled runs and pauses them after 60 days without commits, which is why it shouldn't be the only trigger.
+- `.github/workflows/check-notices.yml` runs every 15 minutes. It needs the repo secrets `CRON_SECRET` and `APP_DOMAIN` (`www.pnutify.app`). GitHub delays scheduled runs and pauses them after 60 days without commits, which is why it shouldn't be the only trigger. It also **fails, and GitHub emails you, when a board has been unreadable for 3+ hours**. That usually means the university changed its page layout and `src/lib/scrapeNotices.ts` needs updating.
 - `vercel.json` adds a once-a-day Vercel Cron, the limit on the free plan.
 
 ### Alerts on iPhone
@@ -63,6 +78,17 @@ iOS only allows web push for sites added to the home screen (iOS 16.4+). The app
 - Tasks and read history stay in the browser.
 - When deadline reminders are on, only the title, course and due time of upcoming tasks are sent to the server, so it can send the reminders. Turning reminders off clears that copy.
 
+## Tests
+
+```bash
+npm test
+```
+
+- `src/lib/__tests__/scrapeNotices.test.ts` runs the parser against saved copies of both real boards (`src/lib/__tests__/fixtures/`). When a board changes its layout, save the new page there and fix the parser until the tests pass.
+- `src/lib/__tests__/push.test.ts` runs the alert cycle against an in-memory Redis. It checks that each notice is pushed once and reminders aren't repeated, and that a quiet run stays cheap.
+
+CI runs lint, tests and the build on every pull request.
+
 ## Contributing
 
-Issues and pull requests are welcome. Run `npx eslint src` and `npm run build` before opening one.
+Issues and pull requests are welcome. Run `npx eslint src`, `npm test` and `npm run build` before opening one.

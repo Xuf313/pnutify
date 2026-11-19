@@ -9,6 +9,8 @@ export const KEYS = {
   notices: 'notices_cache_v3',
   lastVisit: 'last_visit_v1',
   dismissed: 'dismissed_cards_v1',
+  /** Pending first-visit cutoff (a number) until old notices are marked read, then "done". */
+  readSeed: 'read_seed_v1',
 } as const;
 
 // Keys from older versions. PLATO credentials were kept here in plain text —

@@ -154,7 +154,7 @@ export function SettingsSheet(p: Props) {
                 onClick={() => p.setTheme(t.id)}
                 aria-pressed={p.theme === t.id}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-xl border-2 font-pixel text-xs font-bold",
+                  "flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-xs font-extrabold",
                   p.theme === t.id ? "border-border bg-card shadow-[2px_2px_0px_var(--color-border)] text-foreground" : "border-border/30 text-muted-foreground",
                 )}
               >

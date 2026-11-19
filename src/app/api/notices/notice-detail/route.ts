@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import * as cheerio from 'cheerio';
+import { extractArticleTitle } from '@/lib/scrapeNotices';
 
 const ALLOWED_HOSTS = ['cse.pusan.ac.kr', 'international.pusan.ac.kr'];
 
@@ -42,36 +42,7 @@ export async function GET(request: Request) {
     if (/찾을\s*수\s*없|존재\s*하지\s*않/.test(html.slice(0, 3000))) {
       return NextResponse.json({ error: 'Source page not found', sourceUrl: parsed.toString(), title: listingTitle || null });
     }
-    const $ = cheerio.load(html);
-
-    // Real K2Web structure, confirmed via devtools: the full title lives in
-    // .board-view .title strong (keeps the [category] tag, matches listing style),
-    // with a clean untagged copy also sitting in a hidden #artclViewTitle input.
-    let title: string | null = null;
-
-    const heading = $('.board-view .title strong, .view.viewCont .title strong').first().text().trim().replace(/\s+/g, ' ');
-    if (heading) title = heading;
-
-    if (!title) {
-      const hidden = $('#artclViewTitle').attr('value');
-      if (hidden && hidden.trim()) title = hidden.trim();
-    }
-
-    if (!title) {
-      const prefix = listingTitle.replace(/[.\u2026]+$/, '').trim().slice(0, 15);
-      if (prefix.length >= 4) {
-        let best: string | null = null;
-        $('strong, b, h1, h2, h3, h4, h5, dt, td, div, p, li, span').each((_, el) => {
-          const text = $(el).text().trim().replace(/\s+/g, ' ');
-          if (text.startsWith(prefix) && (!best || text.length < best.length)) {
-            best = text;
-          }
-        });
-        title = best;
-      }
-    }
-
-    if (!title) title = listingTitle || null;
+    const title = extractArticleTitle(html, listingTitle) || listingTitle || null;
 
     return NextResponse.json({ title, sourceUrl: parsed.toString() });
   } catch {

@@ -7,6 +7,7 @@ import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, relative } f
 import { isIOS, isStandalone } from "@/lib/client/push";
 import type { AlertCategories, Notice, Tab, Task } from "@/lib/client/types";
 import { SOURCE_LABEL } from "@/lib/client/types";
+import { isFreshNotice } from "@/lib/client/notices";
 
 const DAY = 86_400_000;
 
@@ -25,11 +26,6 @@ type Props = {
   openSettings: () => void;
 };
 
-export function isNewNotice(n: Notice, now: number): boolean {
-  const posted = n.postedAt ?? n.firstSeenAt;
-  return now - posted < 2 * DAY || now - n.firstSeenAt < DAY;
-}
-
 function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
@@ -44,11 +40,12 @@ export function BriefingTab(p: Props) {
   const thisWeek = pending.filter((t) => t.dueDate >= now && kstDay(t.dueDate) !== today && t.dueDate < now + 7 * DAY);
   const doneToday = p.tasks.filter((t) => t.status === "completed" && kstDay(t.dueDate) === today).length;
 
-  const fresh = useMemo(
-    () => p.notices.filter((n) => !p.readIds.has(n.id) && (n.firstSeenAt > p.sinceTs || isNewNotice(n, now))).slice(0, 6),
+  const allFresh = useMemo(
+    () => p.notices.filter((n) => !p.readIds.has(n.id) && isFreshNotice(n, now, p.sinceTs)),
     [p.notices, p.readIds, p.sinceTs, now],
   );
-  const freshCount = p.notices.filter((n) => !p.readIds.has(n.id) && (n.firstSeenAt > p.sinceTs || isNewNotice(n, now))).length;
+  const fresh = allFresh.slice(0, 6);
+  const freshCount = allFresh.length;
 
   // One calm sentence about the shape of the day.
   const parts: string[] = [];
@@ -127,7 +124,7 @@ export function BriefingTab(p: Props) {
               className={cn("flex flex-col items-center gap-1 py-1.5 rounded-lg", i === 0 && "bg-muted")}
               aria-label={`${w.label}: ${plural(w.count, "deadline")}`}
             >
-              <span className="font-pixel text-[10px] font-bold text-muted-foreground">{w.label}</span>
+              <span className="text-[11px] font-bold text-muted-foreground">{w.label}</span>
               <span className="font-pixel text-sm font-bold text-foreground">{w.date}</span>
               <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
                 <span
@@ -254,7 +251,7 @@ function SetupCard({ icon, title, body, cta, onClick }: { icon: React.ReactNode;
         {title}
       </p>
       <p className="text-sm text-muted-foreground">{body}</p>
-      <button onClick={onClick} className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold text-sm px-3 py-2 self-start mt-1">
+      <button onClick={onClick} className="cozy-btn bg-primary text-primary-foreground font-extrabold text-sm px-3 py-2 self-start mt-1">
         {cta}
       </button>
     </div>

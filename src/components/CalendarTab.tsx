@@ -54,7 +54,7 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
               setMonth(today.slice(0, 7));
               setSelected(today);
             }}
-            className="cozy-btn bg-card px-2.5 font-pixel text-xs font-bold"
+            className="cozy-btn bg-card px-2.5 text-xs font-extrabold"
           >
             Today
           </button>
@@ -67,7 +67,7 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
       <div className="cozy-card bg-card p-3">
         <div className="grid grid-cols-7 gap-1 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-            <div key={d} className="text-center font-pixel text-[10px] font-bold text-muted-foreground">
+            <div key={d} className="text-center text-[11px] font-extrabold text-muted-foreground">
               {d}
             </div>
           ))}

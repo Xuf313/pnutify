@@ -1,5 +1,5 @@
 // PNUtify service worker: push notifications only (no offline caching).
-const VERSION = 'v3';
+const VERSION = 'v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
@@ -13,15 +13,21 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/icon-192.png',
-      badge: '/badge-72.png',
-      // Same tag = the new notification replaces the old one instead of stacking a duplicate.
-      tag: data.tag,
-      renotify: false,
-      data: { url: data.url || '/', version: VERSION },
-    }),
+    Promise.all([
+      self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: '/icon-192.png',
+        badge: '/badge-72.png',
+        // Same tag = the new notification replaces the old one instead of stacking a duplicate.
+        tag: data.tag,
+        renotify: false,
+        data: { url: data.url || '/', version: VERSION },
+      }),
+      // If PNUtify is open, tell it to fetch the new notice now instead of on its next refresh.
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then((windows) => windows.forEach((w) => w.postMessage({ type: 'refresh' }))),
+    ]),
   );
 });
 

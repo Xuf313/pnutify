@@ -13,10 +13,10 @@ export async function GET() {
   try {
     let snapshot = await getSnapshot();
     if (!snapshot || Date.now() - snapshot.updatedAt > SNAPSHOT_MAX_AGE_MS) {
-      snapshot = await refreshNotices();
+      snapshot = (await refreshNotices(Date.now(), { quick: true })).snapshot;
     }
     return NextResponse.json(snapshot, {
-      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+      headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' },
     });
   } catch (error) {
     console.error('[notices] failed', error);

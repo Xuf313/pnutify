@@ -206,7 +206,7 @@ function TaskForm({
       className="cozy-card bg-card p-4 border-dashed flex flex-col gap-3"
     >
       <label className="flex flex-col gap-1">
-        <span className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-wider">What&apos;s due</span>
+        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">What&apos;s due</span>
         <input
           autoFocus
           required
@@ -217,7 +217,7 @@ function TaskForm({
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-wider">Course (optional)</span>
+        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Course (optional)</span>
         <input
           value={course}
           onChange={(e) => setCourse(e.target.value)}
@@ -233,7 +233,7 @@ function TaskForm({
       </label>
       <div className="flex flex-wrap gap-2 items-end">
         <label className="flex flex-col gap-1">
-          <span className="font-pixel text-xs font-bold text-muted-foreground uppercase tracking-wider">Due (KST)</span>
+          <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Due (KST)</span>
           <input type="date" value={day} onChange={(e) => setDay(e.target.value)} required className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
         </label>
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Due time" className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
@@ -254,7 +254,7 @@ function TaskForm({
         <button type="button" onClick={onCancel} className="px-3 py-2 font-bold text-sm text-muted-foreground">
           Cancel
         </button>
-        <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-4 py-2 text-sm">
+        <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-extrabold px-4 py-2 text-sm">
           {submitLabel}
         </button>
       </div>

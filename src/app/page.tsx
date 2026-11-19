@@ -13,8 +13,10 @@ import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveThem
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
 import { TABS, type AlertCategories, type Notice, type Tab, type Task, type Theme } from "@/lib/client/types";
 import { formatDate } from "@/lib/client/time";
+import { isFreshNotice } from "@/lib/client/notices";
 
-const REFRESH_MS = 5 * 60 * 1000;
+/** While the app is open and visible. The server checks the boards every minute. */
+const REFRESH_MS = 60 * 1000;
 
 const NAV: { id: Tab; label: string; icon: typeof Sunrise }[] = [
   { id: "briefing", label: "Briefing", icon: Sunrise },
@@ -34,6 +36,12 @@ type Boot = {
   readIds: Set<string>;
   cache: NoticeCache | null;
   sinceTs: number;
+  /**
+   * Set until this device has had its first notice list: everything that isn't
+   * new by then is marked read, so a first visit shows the few new notices
+   * instead of 100+ unread ones.
+   */
+  seedReadSince: number | null;
   tab: Tab;
   noticeId: string | null;
 };
@@ -57,12 +65,17 @@ function boot(): Boot {
   getDeviceId();
   const cache = read<NoticeCache | null>(KEYS.notices, null);
   const link = parseLink(window.location.href);
+  const sinceTs = read<number>(KEYS.lastVisit, 0) || Date.now() - 2 * 86_400_000;
+  const seed = read<number | "done" | null>(KEYS.readSeed, null);
+  const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
+  if (seedReadSince !== null) write(KEYS.readSeed, seedReadSince);
   bootData = {
     theme: loadTheme(),
     tasks: loadTasks(),
     readIds: new Set(read<string[]>(KEYS.read, [])),
     cache: cache && Array.isArray(cache.notices) ? { updatedAt: cache.updatedAt || 0, notices: dedupe(cache.notices) } : null,
-    sinceTs: read<number>(KEYS.lastVisit, 0) || Date.now() - 2 * 86_400_000,
+    sinceTs,
+    seedReadSince,
     tab: link.tab ?? "briefing",
     noticeId: link.noticeId,
   };
@@ -95,6 +108,7 @@ function App() {
   const [now, setNow] = useState(() => Date.now());
   const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
   const lastFetch = useRef(0);
+  const seedReadSince = useRef<number | null>(boot().seedReadSince);
 
   // ---------- deep links: ?tab=notices&notice=<id> (used by push notifications) ----------
   const applyUrl = useCallback((href: string) => {
@@ -103,10 +117,11 @@ function App() {
     if (link.noticeId) setOpenNoticeId(link.noticeId);
   }, []);
 
-  const fetchNotices = useCallback(async () => {
+  const fetchNotices = useCallback(async (bypassCache = false) => {
     lastFetch.current = Date.now();
     try {
-      const res = await fetch("/api/notices", { cache: "no-store" });
+      // After a push the shared CDN copy may be up to 30 s old; ask the server directly.
+      const res = await fetch(bypassCache ? `/api/notices?t=${Date.now()}` : "/api/notices", { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       if (Array.isArray(data.notices)) {
@@ -116,6 +131,14 @@ function App() {
         setStaleSources(Array.isArray(data.staleSources) ? data.staleSources : []);
         write(KEYS.notices, { updatedAt: Number(data.updatedAt) || Date.now(), notices: list } satisfies NoticeCache);
         setNoticeError(false);
+        const since = seedReadSince.current;
+        if (since !== null && list.length > 0) {
+          const t = Date.now();
+          const old = list.filter((n) => !isFreshNotice(n, t, since)).map((n) => n.id);
+          setReadIds((prev) => new Set([...prev, ...old]));
+          seedReadSince.current = null;
+          write(KEYS.readSeed, "done");
+        }
       }
     } catch {
       setNoticeError(true);
@@ -128,7 +151,7 @@ function App() {
   useEffect(() => {
     const t = setTimeout(() => write(KEYS.lastVisit, Date.now()), 10_000);
     if (window.location.search) window.history.replaceState({}, "", window.location.pathname);
-    const first = setTimeout(fetchNotices, 0);
+    const first = setTimeout(() => fetchNotices(), 0);
 
     (async () => {
       await registerServiceWorker();
@@ -140,6 +163,8 @@ function App() {
 
     const onSwMessage = (e: MessageEvent) => {
       if (e.data?.type === "open" && typeof e.data.url === "string") applyUrl(e.data.url);
+      // A push just arrived: show the new notice right away.
+      if (e.data?.type === "refresh") fetchNotices(true);
     };
     navigator.serviceWorker?.addEventListener("message", onSwMessage);
 
@@ -161,12 +186,13 @@ function App() {
   useEffect(() => {
     const tick = setInterval(() => {
       setNow(Date.now());
-      if (document.visibilityState === "visible" && Date.now() - lastFetch.current > REFRESH_MS) fetchNotices();
+      // Small margin so a fetch that ran a moment under a minute ago still counts as due.
+      if (document.visibilityState === "visible" && Date.now() - lastFetch.current > REFRESH_MS - 5_000) fetchNotices();
     }, 60_000);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       setNow(Date.now());
-      if (Date.now() - lastFetch.current > 2 * 60_000) fetchNotices();
+      if (Date.now() - lastFetch.current > 30_000) fetchNotices();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -269,7 +295,7 @@ function App() {
           alertsReady={alertsReady}
           onOpenNotice={openNotice}
           onMarkRead={markRead}
-          onRetry={fetchNotices}
+          onRetry={() => fetchNotices()}
           openSettings={() => setSettingsOpen(true)}
         />
       )}
@@ -321,7 +347,7 @@ function App() {
                 )}
               >
                 <Icon size={22} />
-                <span className="font-pixel text-[10px] font-bold tracking-wide">{label}</span>
+                <span className="text-[11px] font-extrabold">{label}</span>
                 {badge(id) > 0 && (
                   <span className="absolute top-1 right-[22%] min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center border border-border">
                     {badge(id) > 99 ? "99+" : badge(id)}
@@ -337,7 +363,7 @@ function App() {
       <div className="hidden md:flex h-[100dvh] overflow-hidden">
         <aside className="w-64 lg:w-72 shrink-0 flex flex-col border-r-2 border-border bg-card/80 backdrop-blur-sm">
           <div className="px-6 pt-8 pb-6 border-b-2 border-dashed border-border/30">
-            <div className="washi-tape font-pixel text-[10px] font-bold tracking-widest px-3 py-1 inline-block mb-4 -rotate-1">부산대학교</div>
+            <div className="washi-tape text-[11px] font-extrabold tracking-widest px-3 py-1 inline-block mb-4 -rotate-1">부산대학교</div>
             <div className="flex items-center gap-3">
               <AppLogo size={44} className="-rotate-2" />
               <h1 className="font-pixel text-3xl font-bold text-foreground">PNUtify</h1>
@@ -363,7 +389,7 @@ function App() {
                 {badge(id) > 0 && (
                   <span
                     className={cn(
-                      "ml-auto font-pixel text-[10px] font-bold px-1.5 py-0.5 rounded-md border",
+                      "ml-auto text-[11px] font-extrabold px-1.5 py-0.5 rounded-md border",
                       tab === id ? "bg-primary-foreground/20 border-primary-foreground/30" : "bg-primary text-primary-foreground border-border",
                     )}
                   >
