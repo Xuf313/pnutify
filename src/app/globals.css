@@ -21,6 +21,13 @@
 }
 
 /* ── Theme: PNU Blue (default) ── */
+:root {
+  /* Height of the iPhone status bar / notch area (0 elsewhere). One place, so it can be faked in tests. */
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+.status-band { height: var(--safe-top); }
+
 :root, [data-theme="pnu"] {
   --t-background: #EEF3FD;
   --t-foreground: #0D1F3C;

@@ -456,11 +456,17 @@ function App() {
     <div className="font-sans selection:bg-primary/20 selection:text-foreground min-h-[100dvh]">
       {/* ---------- phone ---------- */}
       <div className="md:hidden flex flex-col min-h-[100dvh]">
+        {/* iOS 26 blurs the top edge of home-screen apps. It draws a plain colour instead when a
+            fixed, full-width box with a solid background-color sits there, so this band covers the
+            status-bar area. It must take touches: a pointer-events:none overlay doesn't count. */}
+        <div aria-hidden className="status-band fixed top-0 inset-x-0 z-40 bg-background" />
         <header
           // Solid, not translucent: iOS treats an opaque bar at the top as the top bar and doesn't
           // blur it into the status bar area (a see-through, blurred header came out fuzzy there).
           className="sticky top-0 z-20 px-5 pb-3 flex items-center justify-between bg-background border-b-2 border-dashed border-border/20"
-          style={{ paddingTop: "max(0.9rem, env(safe-area-inset-top))" }}
+          // Below the status bar plus up to 1.5rem more, so the title stays out of iOS's edge blur
+          // even on phones that installed the app with the old translucent status bar.
+          style={{ paddingTop: "max(0.9rem, calc(var(--safe-top) + min(var(--safe-top), 1.5rem)))" }}
         >
           <div className="flex items-center gap-2.5">
             <AppLogo size={34} className="-rotate-2" />
