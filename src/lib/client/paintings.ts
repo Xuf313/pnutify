@@ -22,7 +22,6 @@ export const PAINTINGS: Painting[] = [
   { slug: 'milkmaid', title: 'The Milkmaid', artist: 'Johannes Vermeer', year: 'c. 1658', medium: 'oil on canvas', focus: '50% 40%' },
   { slug: 'paris-street-rainy-day', title: 'Paris Street; Rainy Day', artist: 'Gustave Caillebotte', year: '1877', medium: 'oil on canvas' },
   { slug: 'grande-jatte', title: 'A Sunday Afternoon on the Island of La Grande Jatte', artist: 'Georges Seurat', year: '1884–1886', medium: 'oil on canvas' },
-  { slug: 'ballet-class', title: 'The Ballet Class', artist: 'Edgar Degas', year: '1871–1874', medium: 'oil on canvas', focus: '50% 60%' },
   { slug: 'wanderer', title: 'Wanderer above the Sea of Fog', artist: 'Caspar David Friedrich', year: 'c. 1818', medium: 'oil on canvas', focus: '50% 35%' },
   { slug: 'boating-party', title: 'Luncheon of the Boating Party', artist: 'Pierre-Auguste Renoir', year: '1880–1881', medium: 'oil on canvas' },
   { slug: 'cafe-terrace', title: 'Café Terrace at Night', artist: 'Vincent van Gogh', year: '1888', medium: 'oil on canvas', focus: '50% 45%' },
