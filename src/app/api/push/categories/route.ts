@@ -1,41 +1,42 @@
 import { NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
+import { DEVICE_TTL_SECONDS, getRedis, isValidDeviceId, KEYS } from '@/lib/redis';
+import { DEFAULT_CATEGORIES, normalizeCategories } from '@/lib/push';
 
-const redis = Redis.fromEnv();
-const DEFAULT_CATEGORIES: Record<string, boolean> = { international: true, cse: true, tasks: true };
-const DEVICE_TTL_SECONDS = 45 * 24 * 60 * 60;
-
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-const hasRedisEnv = Boolean(redisUrl && redisToken);
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const deviceId = searchParams.get('deviceId');
-  if (!deviceId || !hasRedisEnv) return NextResponse.json({ categories: DEFAULT_CATEGORIES });
+  const redis = getRedis();
+  const deviceId = new URL(request.url).searchParams.get('deviceId');
+  if (!redis || !isValidDeviceId(deviceId)) return NextResponse.json({ categories: DEFAULT_CATEGORIES, subscribed: false });
   try {
-    const stored = (await redis.get<Record<string, boolean>>(`push:categories:${deviceId}`)) || {};
-    // This fires whenever the notices/tasks tab renders — a natural "app is
-    // still being used" signal, so piggyback the TTL refresh here too.
-    await redis.expire(`push:subscription:${deviceId}`, DEVICE_TTL_SECONDS).catch(() => {});
-    await redis.expire(`push:categories:${deviceId}`, DEVICE_TTL_SECONDS).catch(() => {});
-    return NextResponse.json({ categories: { ...DEFAULT_CATEGORIES, ...stored } });
+    const [stored, sub] = await Promise.all([
+      redis.get<unknown>(KEYS.categories(deviceId)),
+      redis.exists(KEYS.subscription(deviceId)),
+    ]);
+    return NextResponse.json({ categories: normalizeCategories(stored), subscribed: sub === 1 });
   } catch {
-    return NextResponse.json({ categories: DEFAULT_CATEGORIES });
+    return NextResponse.json({ categories: DEFAULT_CATEGORIES, subscribed: false });
   }
 }
 
+/** Body: { deviceId, categories: { cse?, international?, tasks? } } — only the given keys change. */
 export async function POST(request: Request) {
-  if (!hasRedisEnv) return NextResponse.json({ error: 'Redis not configured' }, { status: 500 });
+  const redis = getRedis();
+  if (!redis) return NextResponse.json({ error: 'Notifications are not configured on this server' }, { status: 503 });
   try {
     const body = await request.json();
-    const { deviceId, category, enabled } = body || {};
-    if (!deviceId || typeof category !== 'string' || typeof enabled !== 'boolean') {
-      return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
-    }
-    const stored = (await redis.get<Record<string, boolean>>(`push:categories:${deviceId}`)) || {};
-    const updated = { ...DEFAULT_CATEGORIES, ...stored, [category]: enabled };
-    await redis.set(`push:categories:${deviceId}`, updated, { ex: DEVICE_TTL_SECONDS });
+    const { deviceId } = body ?? {};
+    if (!isValidDeviceId(deviceId)) return NextResponse.json({ error: 'Invalid device' }, { status: 400 });
+    // Older clients send { category, enabled }.
+    const patch: Record<string, unknown> =
+      body.categories && typeof body.categories === 'object'
+        ? body.categories
+        : typeof body.category === 'string'
+          ? { [body.category]: body.enabled }
+          : {};
+    const current = normalizeCategories(await redis.get<unknown>(KEYS.categories(deviceId)));
+    const updated = normalizeCategories({ ...current, ...patch });
+    await redis.set(KEYS.categories(deviceId), updated, { ex: DEVICE_TTL_SECONDS });
     return NextResponse.json({ categories: updated });
   } catch {
     return NextResponse.json({ error: 'Failed to update categories' }, { status: 500 });

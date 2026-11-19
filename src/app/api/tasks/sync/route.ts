@@ -1,29 +1,33 @@
 import { NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
+import { DEVICE_TTL_SECONDS, getRedis, isValidDeviceId, KEYS } from '@/lib/redis';
 
-const redis = Redis.fromEnv();
-const DEVICE_TTL_SECONDS = 45 * 24 * 60 * 60;
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-const hasRedisEnv = Boolean(redisUrl && redisToken);
+type IncomingTask = { id?: unknown; title?: unknown; course?: unknown; dueDate?: unknown; status?: unknown };
 
-// Tasks otherwise only live in the browser's localStorage — the cron job
-// (which runs with no browser open) needs its own copy server-side to be
-// able to check deadlines at all. Only unfinished, user-created tasks matter
-// for deadline pings, so that's all this stores. Keyed per device so one
-// person's tasks don't overwrite another's, and TTL'd so an inactive
-// device's data doesn't linger forever.
+/**
+ * Tasks live in the browser. The cron runs with no browser open, so it keeps
+ * a minimal copy (title, course, due time) of unfinished, upcoming tasks per
+ * device to send deadline reminders. Nothing else is stored.
+ */
 export async function POST(request: Request) {
-  if (!hasRedisEnv) return NextResponse.json({ ok: false, error: 'Redis not configured' });
+  const redis = getRedis();
+  if (!redis) return NextResponse.json({ ok: false, error: 'Not configured' });
   try {
     const body = await request.json();
     const deviceId = body?.deviceId;
-    const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
-    if (!deviceId) return NextResponse.json({ ok: false, error: 'Missing deviceId' }, { status: 400 });
+    if (!isValidDeviceId(deviceId)) return NextResponse.json({ ok: false, error: 'Invalid device' }, { status: 400 });
+    const tasks: IncomingTask[] = Array.isArray(body?.tasks) ? body.tasks.slice(0, 300) : [];
+    const now = Date.now();
     const relevant = tasks
-      .filter((t: any) => t && t.source === 'own' && t.status !== 'completed' && t.dueDate)
-      .map((t: any) => ({ id: t.id, title: t.title, course: t.course, dueDate: t.dueDate }));
-    await redis.set(`tasks:list:${deviceId}`, relevant, { ex: DEVICE_TTL_SECONDS });
+      .map((t) => ({
+        id: String(t.id ?? '').slice(0, 80),
+        title: String(t.title ?? '').slice(0, 200),
+        course: String(t.course ?? '').slice(0, 80),
+        dueDate: typeof t.dueDate === 'number' ? t.dueDate : Date.parse(String(t.dueDate ?? '')),
+        status: t.status,
+      }))
+      .filter((t) => t.id && t.title && t.status !== 'completed' && !Number.isNaN(t.dueDate) && t.dueDate > now - 3600_000)
+      .map(({ id, title, course, dueDate }) => ({ id, title, course, dueDate }));
+    await redis.set(KEYS.tasks(deviceId), relevant, { ex: DEVICE_TTL_SECONDS });
     return NextResponse.json({ ok: true, count: relevant.length });
   } catch {
     return NextResponse.json({ ok: false, error: 'Failed to sync tasks' }, { status: 500 });
