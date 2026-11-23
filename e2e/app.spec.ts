@@ -24,10 +24,8 @@ test.describe('Briefing', () => {
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
-    await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices
-    // The week ahead as a line: seven stops, today first.
-    await expect(brief.locator('.route__day')).toHaveCount(7);
-    await expect(brief.locator('.route__day').first()).toHaveClass(/is-today/);
+    await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
+    await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
     await noSidewaysScroll(page);
   });
 });

@@ -1,16 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;600;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
-/*
- * PNUtify reads like a daily paper: serif headlines, rules instead of boxes,
- * and the week drawn as a line where deadlines are stops. Colour comes from
- * the five colour modes below.
- */
 @theme inline {
-  --font-sans: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
-  /* Display: a Korean/Latin serif for headings and the wordmark. (Kept under its old name.) */
-  --font-pixel: 'Hahmlet', 'Nanum Myeongjo', serif;
-  --font-display: 'Hahmlet', 'Nanum Myeongjo', serif;
+  /* Nunito for Latin; Korean (which Nunito doesn't have) in IBM Plex Sans KR, so it looks the same on every phone. */
+  --font-sans: 'Nunito', 'IBM Plex Sans KR', sans-serif;
+  --font-pixel: 'Pixelify Sans', monospace;
 
   --color-background: var(--t-background);
   --color-foreground: var(--t-foreground);
@@ -22,29 +16,12 @@
   --color-secondary-foreground: var(--t-secondary-fg);
   --color-accent: var(--t-accent);
   --color-accent-foreground: var(--t-accent-fg);
-  --color-signal: var(--t-signal);
-  --color-signal-foreground: var(--t-signal-fg);
   --color-muted: var(--t-muted);
   --color-muted-foreground: var(--t-muted-fg);
   --color-border: var(--t-border);
-  --color-ink: var(--t-ink);
 }
 
-/*
- * Roles: background (platform), card (raised surface), foreground (ink),
- * primary (the school colour: links, selection, unread), signal (the line:
- * deadlines, today, the active tab), secondary (done), border (hairlines),
- * ink (strong rules and outlines).
- */
-
-/*
- * The five colour modes keep their original colours. Each mode's own colour
- * is its accent (primary for fills, signal for text and the week line), and
- * its original outline colour draws the newspaper rules (ink). Hairlines are
- * a light tint of that outline.
- */
-
-/* ── PNU Blue (default) ── */
+/* ── Theme: PNU Blue (default) ── */
 :root, [data-theme="pnu"] {
   --t-background: #EEF3FD;
   --t-foreground: #0D1F3C;
@@ -53,18 +30,18 @@
   --t-primary-fg: #FFFFFF;
   --t-secondary: #00A651;
   --t-secondary-fg: #FFFFFF;
-  --t-accent: #DCE7FA;
-  --t-accent-fg: #143F90;
-  --t-signal: #143F90;
-  --t-signal-fg: #FFFFFF;
+  --t-accent: #4A7FD4;
+  --t-accent-fg: #FFFFFF;
   --t-muted: #D4E0F5;
   --t-muted-fg: #5A6E99;
-  --t-border: #CFDBF1;
-  --t-ink: #143F90;
+  --t-border: #143F90;
+  --t-grid-color: rgba(20, 63, 144, 0.08);
+  --t-washi: rgba(0, 166, 81, 0.75);
 }
 
-/* ── Blossom (봄) ── */
+/* ── Theme: Cherry Blossom (봄) ── */
 [data-theme="cherry"] {
+  --t-background: #FFF0F7;
   --t-background: #FCF5F7;
   --t-foreground: #3D212A;
   --t-card: #FFFFFF;
@@ -72,55 +49,68 @@
   --t-primary-fg: #FFFFFF;
   --t-secondary: #E8A3BA;
   --t-secondary-fg: #3D212A;
-  --t-accent: #F7E3EA;
-  --t-accent-fg: #8E4560;
-  --t-signal: #B95C7D;
-  --t-signal-fg: #FFFFFF;
+  --t-accent: #E08DA9;
+  --t-accent-fg: #FFFFFF;
   --t-muted: #F2E5E9;
   --t-muted-fg: #8C6572;
-  --t-border: #ECDCE2;
-  --t-ink: #965D70;
+  --t-border: #965D70;
+  --t-grid-color: rgba(150, 93, 112, 0.15);
+  --t-washi: #D47E9B;
 }
 
-/* ── Twilight ── */
+/* ── Theme: Purple (Twilight - iPhone 12 Style) ── */
 [data-theme="midnight"] {
-  --t-background: #F7F5FC;
-  --t-foreground: #2B213D;
+  --t-background: #F7F5FC; 
+  --t-foreground: #2B213D; 
   --t-card: #FFFFFF;
-  --t-primary: #9B7ED4;
-  --t-primary-fg: #FFFFFF;
-  --t-secondary: #BCA3E8;
-  --t-secondary-fg: #2B213D;
-  --t-accent: #ECE5F8;
-  --t-accent-fg: #5F45A3;
-  --t-signal: #7B5DBE;
-  --t-signal-fg: #FFFFFF;
+  
+  /* A slightly deeper violet so the date and icons remain readable on white */
+  --t-primary: #9B7ED4; 
+  --t-primary-fg: #FFFFFF; 
+  
+  /* The exact bright, vibrant iPhone 12 Purple for your badges and fills */
+  --t-secondary: #BCA3E8; 
+  --t-secondary-fg: #2B213D; 
+  
+  --t-accent: #A98DE0; 
+  --t-accent-fg: #FFFFFF;
+  
   --t-muted: #EAE5F2;
   --t-muted-fg: #73658C;
-  --t-border: #E3DCEF;
-  --t-ink: #735D96;
+  
+  /* Crisp, dark purple for the cozy UI outlines */
+  --t-border: #735D96; 
+  --t-grid-color: rgba(115, 93, 150, 0.15);
+  --t-washi: #9B7ED4; 
 }
 
-/* ── Autumn ── */
+/* ── Theme: Autumn (Maple / Pumpkin Spice) ── */
 [data-theme="autumn"] {
-  --t-background: #FCF5F2;
-  --t-foreground: #3D261D;
+  --t-background: #FCF5F2; 
+  --t-foreground: #3D261D; 
   --t-card: #FFFFFF;
-  --t-primary: #D48B68;
-  --t-primary-fg: #FFFFFF;
-  --t-secondary: #E8B59E;
-  --t-secondary-fg: #3D261D;
-  --t-accent: #F7E7DF;
-  --t-accent-fg: #8F4E30;
-  --t-signal: #B8694A;
-  --t-signal-fg: #FFFFFF;
+  
+  /* A muted, cozy rust/terracotta instead of harsh bright orange */
+  --t-primary: #D48B68; 
+  --t-primary-fg: #FFFFFF; 
+  
+  /* A lighter, soft peach-orange for badges/fills */
+  --t-secondary: #E8B59E; 
+  --t-secondary-fg: #3D261D; 
+  
+  --t-accent: #E09F80; 
+  --t-accent-fg: #FFFFFF;
+  
   --t-muted: #F2E7E1;
   --t-muted-fg: #8C6E61;
-  --t-border: #EDDFD8;
-  --t-ink: #966551;
+  
+  /* A darker, crisp warm brown for cozy UI outlines */
+  --t-border: #966551; 
+  --t-grid-color: rgba(150, 101, 81, 0.15);
+  --t-washi: #D48B68; 
 }
 
-/* ── Night (dark) ── */
+/* ── Theme: Night (dark) ── */
 [data-theme="night"] {
   --t-background: #121826;
   --t-foreground: #E8ECF5;
@@ -129,21 +119,24 @@
   --t-primary-fg: #0D1424;
   --t-secondary: #3DCB86;
   --t-secondary-fg: #0D1424;
-  --t-accent: #22304A;
-  --t-accent-fg: #A9C2FF;
-  --t-signal: #8FB0FF;
-  --t-signal-fg: #0D1424;
+  --t-accent: #8FB0FF;
+  --t-accent-fg: #0D1424;
   --t-muted: #263044;
   --t-muted-fg: #9AA7C2;
-  --t-border: #2C3852;
-  --t-ink: #8FA4CC;
+  --t-border: #3A4A6B;
+  --t-grid-color: rgba(111, 155, 255, 0.06);
+  --t-washi: rgba(61, 203, 134, 0.8);
   color-scheme: dark;
 }
 
 body {
   background-color: var(--t-background);
   color: var(--t-foreground);
-  font-feature-settings: "tnum" 0;
+  background-image:
+    linear-gradient(var(--t-grid-color) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, var(--t-grid-color) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  background-position: -12px -12px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Break Korean between words (eojeol), not mid-word; still wrap very long URLs. */
@@ -152,33 +145,42 @@ body {
 }
 
 @layer components {
-  /* A raised surface: hairline edge, no shadow. */
   .cozy-card {
     background-color: var(--t-card);
-    border: 1px solid var(--t-border);
-    border-radius: 14px;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
+    border: 2px solid var(--t-border);
+    border-radius: 12px;
+    box-shadow: 4px 4px 0px var(--t-border);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .cozy-card.interactive:hover { border-color: color-mix(in srgb, var(--t-ink) 28%, var(--t-border)); }
 
-  /* Buttons: flat, 10px corners; colour comes from the bg/text utilities they're used with. */
+  .cozy-card.interactive:hover {
+    transform: translateY(-2px) translateX(-2px);
+    box-shadow: 6px 6px 0px var(--t-border);
+  }
+
+  .cozy-card.interactive:active {
+    transform: translateY(2px) translateX(2px);
+    box-shadow: 2px 2px 0px var(--t-border);
+  }
+
   .cozy-btn {
-    border: 1px solid color-mix(in srgb, var(--t-ink) 14%, var(--t-border));
-    border-radius: 10px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    border: 2px solid var(--t-border);
+    border-radius: 8px;
+    box-shadow: 2px 2px 0px var(--t-border);
+    transition: all 0.1s ease;
   }
-  .cozy-btn.bg-primary, .cozy-btn.bg-signal, .cozy-btn.bg-foreground { border-color: transparent; }
-  .cozy-btn:active { transform: scale(0.97); }
 
-  /* Small label tag (was the washi tape). */
+  .cozy-btn:active {
+    transform: translateY(2px) translateX(2px);
+    box-shadow: 0px 0px 0px var(--t-border);
+  }
+
   .washi-tape {
-    background-color: var(--t-accent);
-    color: var(--t-accent-fg);
-    border-radius: 6px;
+    background-color: var(--t-washi);
+    border: 2px solid var(--t-border);
+    box-shadow: 2px 2px 0px var(--t-border);
+    color: #ffffff;
   }
-
-  /* Display type: the serif, tight. */
-  .display { font-family: var(--font-display); letter-spacing: -0.02em; }
 }
 
 ::-webkit-scrollbar {
@@ -205,240 +207,228 @@ body {
 @keyframes slide-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ══════════════════════════════════════════════════════════════
-   Briefing: the painting of the day, then the day in order
+   Briefing: an editorial "daily brief" layout
    ══════════════════════════════════════════════════════════════ */
 .brief { max-width: 40rem; margin: 0 auto; color: var(--color-foreground); }
 
-.brief-frame { position: relative; margin: 0; }
+.brief-edges {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--color-muted-foreground); padding: 0 0.25rem 0.5rem;
+}
+
+.brief-frame {
+  position: relative; margin: 0; padding: 0.55rem;
+  background: var(--color-card);
+  border: 2px solid var(--color-border);
+  border-radius: 0.9rem;
+  box-shadow: 4px 4px 0 var(--color-border);
+}
 .brief-frame__canvas {
-  position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 16px;
-  background: var(--color-muted);
+  position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 0.45rem;
+  background: linear-gradient(135deg, var(--color-muted), var(--color-accent));
 }
 .brief-frame__canvas img {
   width: 100%; height: 100%; object-fit: cover; display: block;
-  opacity: 0; transition: opacity 0.6s ease;
+  opacity: 0; transition: opacity 0.6s ease, transform 8s ease;
 }
 .brief-frame__canvas img.is-loaded { opacity: 1; }
+.brief-frame:hover .brief-frame__canvas img { transform: scale(1.03); }
 .brief-frame__overlay {
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 1.1rem 1.25rem; color: #fff;
-  background: linear-gradient(to top, rgba(8, 12, 22, 0.66) 0%, rgba(8, 12, 22, 0.15) 48%, transparent 72%);
+  padding: 1rem 1.15rem; color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.18) 45%, transparent 70%);
 }
+.brief-the { font-family: var(--font-pixel); font-weight: 700; font-size: 1.05rem; line-height: 1; opacity: 0.92; }
 .brief-day {
-  font-family: var(--font-display); font-weight: 700; font-size: clamp(2rem, 9vw, 2.9rem);
-  line-height: 1.02; letter-spacing: -0.025em; text-shadow: 0 1px 16px rgba(0, 0, 0, 0.3);
+  font-family: var(--font-pixel); font-weight: 700; font-size: clamp(2.1rem, 9.5vw, 3rem);
+  line-height: 1; letter-spacing: 0; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
 }
-.brief-caption { font-size: 0.75rem; color: var(--color-muted-foreground); margin: 0.6rem 0.1rem 0; line-height: 1.45; }
+
 .brief-blurb {
-  font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; line-height: 1.32; letter-spacing: -0.015em;
-  margin: 1.1rem 0 0; color: var(--color-foreground); text-wrap: pretty;
+  font-family: var(--font-sans); font-weight: 800; font-size: 1.12rem; line-height: 1.4;
+  margin: 0.6rem 0.25rem 0; color: var(--color-foreground); text-wrap: pretty;
 }
+.brief-caption { font-size: 0.78rem; font-style: italic; color: var(--color-muted-foreground); margin: 0.9rem 0.25rem 0; }
 
-.brief-section { margin-top: 2.6rem; }
+.brief-section { margin-top: 2.4rem; }
 .brief-h2 {
-  display: flex; align-items: baseline; gap: 0.6rem;
-  font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; line-height: 1.15; letter-spacing: -0.02em;
-  margin: 0 0 0.5rem; color: var(--color-foreground);
+  font-family: var(--font-pixel); font-weight: 700; font-size: 1.5rem; line-height: 1.15;
+  margin: 0 0.25rem 0.9rem; color: var(--color-foreground);
 }
-.brief-h2 small { font-family: var(--font-sans); font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--color-muted-foreground); }
+.brief-h2 small { font-family: var(--font-sans); font-size: 0.8rem; font-weight: 800; color: var(--color-muted-foreground); margin-left: 0.5rem; }
 
-/* Next stop: the nearest deadline, on a stretch of the line */
+/* "Push your work forward" */
 .brief-push {
-  position: relative; display: grid; grid-template-columns: 1.25rem 1fr; column-gap: 0.9rem;
-  margin-top: 1.8rem; padding: 1.1rem 1.15rem 1.15rem 0.95rem;
-  background: var(--color-card); border: 1px solid var(--color-border); border-radius: 16px;
+  position: relative; display: flex; gap: 1rem; align-items: center;
+  padding: 1.15rem 1.15rem 1.15rem 1.25rem; margin-top: 2rem;
+  border: 2px solid var(--color-border); border-radius: 1rem; background: var(--color-card);
+  box-shadow: 4px 4px 0 var(--color-border);
 }
-.brief-push__rail { position: relative; display: flex; justify-content: center; }
-.brief-push__rail::before { content: ""; position: absolute; top: -1.15rem; bottom: -1.15rem; width: 4px; border-radius: 4px; background: var(--color-signal); }
-.brief-push__stop {
-  position: relative; margin-top: 0.15rem; width: 1.05rem; height: 1.05rem; border-radius: 999px;
-  background: var(--color-card); border: 4px solid var(--color-signal);
+.brief-push__label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-primary); }
+.brief-push__topic { font-family: var(--font-sans); font-weight: 800; font-size: 1.3rem; line-height: 1.25; margin: 0.25rem 0 0.35rem; }
+.brief-push__text { font-size: 0.92rem; color: var(--color-muted-foreground); font-weight: 600; }
+.brief-star {
+  flex-shrink: 0; width: 5.6rem; height: 5.6rem; display: grid; place-items: center; text-align: center;
+  background: var(--color-primary); color: var(--color-primary-foreground);
+  clip-path: polygon(50% 0%, 61% 13%, 77% 6%, 79% 23%, 96% 25%, 89% 40%, 100% 52%, 88% 63%, 93% 79%, 76% 81%, 71% 97%, 57% 89%, 44% 100%, 36% 86%, 19% 92%, 18% 75%, 2% 69%, 10% 54%, 0% 41%, 13% 31%, 9% 15%, 26% 15%, 32% 0%, 45% 9%);
+  transform: rotate(-8deg); transition: transform 0.25s ease;
+  font-family: var(--font-sans); font-weight: 800; font-size: 0.85rem; line-height: 1.1;
 }
-.brief-push__label { font-size: 0.85rem; font-weight: 600; color: var(--color-signal); }
-.brief-push__topic { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1.25; letter-spacing: -0.015em; margin: 0.15rem 0 0.3rem; }
-.brief-push__text { font-size: 0.92rem; color: var(--color-muted-foreground); line-height: 1.5; }
-.brief-push__cta {
-  margin-top: 0.85rem; display: inline-flex; align-items: center; gap: 0.35rem;
-  padding: 0.5rem 0.85rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600;
-  background: var(--color-foreground); color: var(--color-background);
-}
-.brief-push__cta:hover { opacity: 0.9; }
+.brief-star:hover, .brief-star:focus-visible { transform: rotate(4deg) scale(1.05); }
+.brief-star span { display: block; }
 
 /* to-dos */
 .brief-todo {
-  display: flex; align-items: flex-start; gap: 0.85rem; padding: 0.85rem 0;
-  border-bottom: 1px solid var(--color-border);
+  display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.85rem 0.25rem;
+  border-bottom: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent);
 }
 .brief-todo:last-child { border-bottom: 0; }
 .brief-check {
-  width: 1.35rem; height: 1.35rem; flex-shrink: 0; margin-top: 0.12rem; border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--color-foreground) 35%, transparent); background: transparent;
+  width: 1.45rem; height: 1.45rem; flex-shrink: 0; margin-top: 0.1rem; border-radius: 0.4rem;
+  border: 2px solid var(--color-border); background: var(--color-background);
   display: grid; place-items: center; color: var(--color-secondary-foreground);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition: background 0.2s ease, transform 0.15s ease;
 }
-.brief-check:hover { border-color: var(--color-secondary); }
 .brief-check:active { transform: scale(0.9); }
-.brief-check[aria-checked="true"] { background: var(--color-secondary); border-color: var(--color-secondary); }
-.brief-todo__label { font-weight: 600; line-height: 1.35; }
-.brief-todo__ctx { font-size: 0.82rem; color: var(--color-muted-foreground); margin-top: 0.15rem; }
-.brief-todo.is-done .brief-todo__label { text-decoration: line-through; opacity: 0.5; }
-.brief-alldone { padding: 1.2rem 0; }
-.brief-alldone h3 { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.2; }
+.brief-check[aria-checked="true"] { background: var(--color-secondary); }
+.brief-todo__label { font-weight: 800; line-height: 1.3; }
+.brief-todo__ctx { font-size: 0.82rem; font-weight: 700; color: var(--color-muted-foreground); margin-top: 0.15rem; }
+.brief-todo.is-done .brief-todo__label { text-decoration: line-through; opacity: 0.55; }
+.brief-alldone {
+  text-align: center; padding: 1.4rem 1rem; border: 2px dashed color-mix(in srgb, var(--color-border) 35%, transparent);
+  border-radius: 1rem;
+}
+.brief-alldone h3 { font-family: var(--font-pixel); font-weight: 700; font-size: 1.3rem; line-height: 1.1; }
 
-/* New updates */
-.brief-item { display: grid; grid-template-columns: 0.9rem 1fr; gap: 0.5rem; padding: 0.9rem 0; }
-.brief-item + .brief-item { border-top: 1px solid var(--color-border); }
-.brief-item__dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: var(--color-primary); margin-top: 0.5rem; }
-.brief-item.is-read .brief-item__dot { background: transparent; }
-.brief-item__title { font-weight: 600; line-height: 1.4; }
-.brief-item__title button:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.brief-item.is-read .brief-item__title { font-weight: 400; color: var(--color-muted-foreground); }
-.brief-item__text { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; font-size: 0.82rem; color: var(--color-muted-foreground); margin-top: 0.25rem; line-height: 1.45; }
-.brief-tag { font-weight: 600; color: var(--color-foreground); }
+/* "New updates": numbered items */
+.brief-item { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.35rem; padding: 0.95rem 0.25rem; }
+.brief-item + .brief-item { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
+.brief-item__num { font-family: var(--font-pixel); font-weight: 700; font-size: 1.25rem; line-height: 1.05; color: var(--color-primary); }
+.brief-item__title { font-weight: 800; line-height: 1.32; }
+.brief-item__title a:hover, .brief-item__title button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.brief-item.is-read .brief-item__title { font-weight: 700; color: var(--color-muted-foreground); }
+.brief-tag {
+  display: inline-block; vertical-align: 2px; margin-left: 0.45rem; padding: 0.05rem 0.45rem;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  border: 1.5px solid currentColor; border-radius: 999px; color: var(--color-muted-foreground);
+}
 .brief-tag--primary { color: var(--color-primary); }
 .brief-tag--secondary { color: var(--color-secondary); }
-.brief-source { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-muted-foreground); }
-.brief-source:hover { color: var(--color-primary); }
+.brief-item__text { font-size: 0.9rem; color: var(--color-muted-foreground); font-weight: 600; margin-top: 0.25rem; line-height: 1.45; }
+.brief-source {
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: -3px;
+  width: 1.15rem; height: 1.15rem; margin-left: 0.35rem; border-radius: 0.3rem;
+  border: 1.5px solid var(--color-border); background: var(--color-card); color: var(--color-primary);
+  transform: rotate(var(--tilt, -3deg)); transition: transform 0.2s ease;
+}
+.brief-source:hover { transform: rotate(4deg) scale(1.15); }
 
-/* Your day */
-.brief-day-card { border-top: 1px solid var(--color-border); }
-.brief-slot { display: grid; grid-template-columns: 5rem 1fr; gap: 0.75rem; padding: 0.7rem 0; align-items: baseline; border-bottom: 1px solid var(--color-border); }
-.brief-slot__time { font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; color: var(--color-signal); }
-.brief-slot__event { font-weight: 600; line-height: 1.35; }
-.brief-slot__event small { display: block; font-size: 0.8rem; font-weight: 400; color: var(--color-muted-foreground); }
-.brief-part { font-size: 0.8rem; font-weight: 600; color: var(--color-muted-foreground); padding: 0.9rem 0 0.1rem; }
-
-/* Looking ahead: the week as a line, deadlines as stops */
-.route {
-  position: relative; display: grid; grid-template-columns: repeat(7, 1fr);
-  padding: 0.6rem 0 0.2rem;
-}
-.route::before {
-  content: ""; position: absolute; left: calc(100% / 14); right: calc(100% / 14); top: calc(0.6rem + 1.05rem - 2px);
-  height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--color-signal) 30%, var(--color-border));
-}
-.route__day { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; border-radius: 10px; padding-bottom: 0.3rem; }
-.route__day:hover .route__label { color: var(--color-foreground); }
-.route__stop {
-  position: relative; display: grid; place-items: center; width: 2.1rem; height: 2.1rem;
-}
-.route__stop span {
-  width: 0.8rem; height: 0.8rem; border-radius: 999px;
-  background: var(--color-background); border: 3px solid color-mix(in srgb, var(--color-signal) 30%, var(--color-border));
-}
-.route__day.has-due .route__stop span {
-  width: 1.75rem; height: 1.75rem; border: 0; background: var(--color-signal); color: var(--color-signal-fg);
-  display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
-}
-.route__day.is-today .route__stop span { border-color: var(--color-foreground); }
-.route__day.is-today.has-due .route__stop span { box-shadow: 0 0 0 3px var(--color-background), 0 0 0 5px var(--color-foreground); }
-.route__label { font-size: 0.72rem; font-weight: 500; color: var(--color-muted-foreground); line-height: 1.2; text-align: center; }
-.route__label b { display: block; font-size: 0.95rem; font-weight: 600; color: var(--color-foreground); font-variant-numeric: tabular-nums; }
-.route__day.is-today .route__label { color: var(--color-foreground); font-weight: 600; }
+/* "Your day" */
+.brief-day-card { border: 2px solid var(--color-border); border-radius: 1rem; background: var(--color-card); overflow: hidden; }
+.brief-slot { display: grid; grid-template-columns: 5.2rem 1fr; gap: 0.75rem; padding: 0.7rem 1rem; align-items: baseline; }
+.brief-slot + .brief-slot { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
+.brief-slot__time { font-family: var(--font-pixel); font-weight: 700; font-size: 0.95rem; color: var(--color-primary); }
+.brief-slot__event { font-weight: 800; line-height: 1.3; }
+.brief-slot__event small { display: block; font-size: 0.8rem; font-weight: 700; color: var(--color-muted-foreground); }
+.brief-part { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-muted-foreground); padding: 0.6rem 1rem 0; }
 
 /* footer */
-.brief-footer { margin: 3.2rem 0 1rem; padding-top: 1.4rem; border-top: 1px solid var(--color-border); }
-.brief-footer__credit { font-size: 0.85rem; line-height: 1.55; color: var(--color-muted-foreground); text-wrap: pretty; }
-.brief-footer__credit em { font-style: normal; font-weight: 600; color: var(--color-foreground); }
-.brief-footer__src { color: var(--color-foreground); }
-.brief-footer__love { margin-top: 0.35rem; font-size: 0.8rem; color: var(--color-muted-foreground); }
+.brief-footer { text-align: center; margin: 3rem 0 1rem; padding-top: 1.6rem; border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 25%, transparent); }
+.brief-footer__credit { font-family: var(--font-sans); font-weight: 700; font-size: 0.95rem; line-height: 1.5; color: var(--color-muted-foreground); text-wrap: balance; }
+.brief-footer__credit em { font-style: normal; font-weight: 800; color: var(--color-foreground); }
+.brief-footer__src { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-foreground); transform: rotate(var(--tilt, 0deg)); }
+.brief-footer__love { margin-top: 0.6rem; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; color: var(--color-muted-foreground); }
 
 @media (prefers-reduced-motion: reduce) {
-  .brief-frame__canvas img, .brief-check { transition: none; }
+  .brief-frame__canvas img, .brief-star, .brief-source, .brief-check { transition: none; }
+  .brief-frame:hover .brief-frame__canvas img { transform: none; }
 }
-
-/* ══════════════════════════════════════════════════════════════
-   Tasks: a plain checklist, rows divided by hairlines
-   ══════════════════════════════════════════════════════════════ */
-.stops { display: flex; flex-direction: column; border-top: 1px solid var(--color-border); }
-.stop { display: flex; align-items: center; gap: 0.8rem; min-height: 3.6rem; padding: 0.55rem 0; border-bottom: 1px solid var(--color-border); }
-.stop__marker {
-  flex-shrink: 0; width: 1.4rem; height: 1.4rem; display: grid; place-items: center; border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--color-foreground) 35%, transparent); color: var(--color-secondary-foreground);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-.stop__marker:hover { border-color: var(--color-secondary); }
-.stop__marker:active { transform: scale(0.9); }
-.stop.is-overdue .stop__marker { border-color: var(--color-signal); }
-.stop.is-done .stop__marker { background: var(--color-secondary); border-color: var(--color-secondary); }
 
 /* ══════════════════════════════════════════════════════════════
    A notice read inside the app (markup rebuilt server-side)
    ══════════════════════════════════════════════════════════════ */
-.notice-body { font-size: 0.97rem; line-height: 1.75; color: var(--color-foreground); overflow-wrap: anywhere; }
+.notice-body { font-size: 0.95rem; line-height: 1.65; color: var(--color-foreground); overflow-wrap: anywhere; }
 .notice-body p, .notice-body div { margin: 0 0 0.55rem; }
 .notice-body div > div, .notice-body li > p { margin-bottom: 0; }
-.notice-body strong { font-weight: 700; }
-.notice-body h4 { font-weight: 700; font-size: 1.02rem; margin: 1rem 0 0.4rem; }
-.notice-body a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+.notice-body strong { font-weight: 800; }
+.notice-body h4 { font-weight: 800; font-size: 1.02rem; margin: 1rem 0 0.4rem; }
+.notice-body a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; font-weight: 700; }
 .notice-body ul, .notice-body ol { margin: 0 0 0.6rem 1.25rem; }
 .notice-body ul { list-style: disc; }
 .notice-body ol { list-style: decimal; }
 .notice-body img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.4rem 0; }
-.notice-body hr { border: 0; border-top: 1px solid var(--color-border); margin: 1rem 0; }
+.notice-body hr { border: 0; border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 30%, transparent); margin: 1rem 0; }
 .notice-body blockquote { border-left: 3px solid var(--color-muted); padding-left: 0.75rem; color: var(--color-muted-foreground); }
 /* Wide tables scroll sideways instead of stretching the sheet. */
 .notice-body table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.85rem; }
-.notice-body td, .notice-body th { border: 1px solid var(--color-border); padding: 0.35rem 0.5rem; vertical-align: top; min-width: 4rem; }
-.notice-body th { background: var(--color-muted); font-weight: 600; }
+.notice-body td, .notice-body th { border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent); padding: 0.35rem 0.5rem; vertical-align: top; min-width: 4rem; }
+.notice-body th { background: var(--color-muted); font-weight: 800; }
 
-@media (min-width: 768px) {
-  .brief-frame__canvas { aspect-ratio: 16 / 9; }
+/* ══════════════════════════════════════════════════════════════
+   The Briefing's front page: a newspaper clipping taped into the
+   notebook. Pixel nameplate, double rule, the painting, the lead line.
+   ══════════════════════════════════════════════════════════════ */
+.brief-clip {
+  position: relative; margin-top: 0.9rem; padding: 0.9rem 1rem 1.15rem;
+  background: var(--color-card); border: 2px solid var(--color-border); border-radius: 3px;
+  box-shadow: 4px 4px 0 var(--color-border); transform: rotate(-0.5deg);
+}
+.tape {
+  position: absolute; top: -13px; width: 88px; height: 26px; z-index: 1; opacity: 0.88;
+  background: var(--t-washi);
+  clip-path: polygon(4% 0, 96% 6%, 100% 30%, 95% 55%, 100% 80%, 96% 100%, 3% 94%, 0 70%, 5% 45%, 0 20%);
+}
+.tape--l { left: -18px; transform: rotate(-32deg); }
+.tape--r { right: -18px; transform: rotate(28deg); }
+.brief-dateline {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-size: 0.74rem; font-weight: 800; color: var(--color-muted-foreground);
+  padding-bottom: 0.45rem; border-bottom: 2px solid var(--color-border);
+}
+.brief-clip .brief-the { display: block; text-align: center; margin-top: 0.7rem; color: var(--color-primary); opacity: 1; }
+.brief-clip .brief-day {
+  text-align: center; color: var(--color-foreground); text-shadow: none;
+  font-size: clamp(2.3rem, 11.5vw, 3.7rem); line-height: 1; padding: 0.15rem 0 0.6rem; margin-bottom: 0.9rem;
+  border-bottom: 5px double var(--color-border);
+}
+.brief-clip .brief-frame { box-shadow: none; padding: 0.4rem; border-radius: 0.5rem; }
+.brief-clip .brief-frame__canvas { border-radius: 0.3rem; }
+.brief-clip .brief-caption { margin: 0.55rem 0 0; }
+.brief-clip .brief-blurb { font-size: 1.25rem; line-height: 1.35; margin: 0.6rem 0 0; }
+
+/* Sections open with a rule, like the sections of a paper */
+.brief-section { border-top: 2px solid var(--color-border); padding-top: 0.9rem; }
+.brief-push + .brief-cols > :first-child .brief-section:first-child, .brief-cols .brief-section { margin-top: 2.4rem; }
+
+/* Desktop: two columns, with a column rule */
+@media (min-width: 1024px) {
+  .brief { max-width: 54rem; }
+  .brief-clip { max-width: 40rem; margin-left: auto; margin-right: auto; }
+  .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
+  .brief-cols > :last-child { position: relative; }
+  .brief-cols > :last-child::before { content: ""; position: absolute; left: -1.25rem; top: 2.4rem; bottom: 0; border-left: 2px dashed color-mix(in srgb, var(--color-border) 30%, transparent); }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Editorial: the Briefing as the front page of a daily paper: a
-   nameplate, rules instead of boxes, serif headlines everywhere. Colour
-   comes from the chosen mode; rules are drawn in its outline colour.
+   D-day stickers: "D-3", "D-DAY", "D+1" on tasks
    ══════════════════════════════════════════════════════════════ */
-
-/* Nameplate */
-.brief-masthead { text-align: center; }
-.brief-dateline {
-  display: flex; justify-content: space-between; gap: 1rem;
-  font-size: 0.78rem; color: var(--color-muted-foreground);
-  padding-bottom: 0.45rem; border-bottom: 1px solid var(--color-ink);
+.dday {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 3.1rem;
+  /* Numbers in the rounded font: in the pixel font a small 2 reads like an 8. */
+  padding: 0.12rem 0.45rem; font-family: var(--font-sans); font-weight: 800; font-size: 0.78rem; line-height: 1.2; letter-spacing: 0.02em;
+  background: var(--color-card); color: var(--color-foreground);
+  border: 2px solid var(--color-border); border-radius: 6px; box-shadow: 2px 2px 0 var(--color-border);
+  transform: rotate(-3deg);
 }
-.brief-masthead .brief-day {
-  font-family: var(--font-display); font-weight: 800; color: var(--color-foreground); text-shadow: none;
-  font-size: clamp(2.6rem, 12vw, 4.2rem); line-height: 1; letter-spacing: -0.035em;
-  padding: 0.9rem 0 0.8rem; margin-bottom: 1.1rem;
-  border-bottom: 3px double var(--color-ink);
-}
-.brief-masthead .brief-frame__canvas { border-radius: 0; aspect-ratio: 3 / 2; }
-.brief-masthead .brief-caption { text-align: left; font-style: italic; border-bottom: 1px solid var(--color-border); padding-bottom: 0.6rem; }
-.brief-masthead .brief-blurb { text-align: left; font-size: 1.65rem; line-height: 1.25; font-weight: 700; letter-spacing: -0.025em; margin-top: 1.1rem; }
+.dday--soon { background: var(--t-washi); color: #fff; }
+.dday--today { background: var(--color-primary); color: var(--color-primary-foreground); transform: rotate(3deg); }
+.dday--over { background: #E5484D; color: #fff; }
 
-/* Sections open with a heavy rule, like a page's section break */
-.brief-section { border-top: 2px solid var(--color-ink); padding-top: 0.7rem; margin-top: 2.2rem; }
-.brief-h2 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+/* The tab bar's active tab is a raised button that presses down */
+.nav-tab { transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease; }
+.nav-tab:active { transform: translate(2px, 2px); box-shadow: none; }
 
-/* Next stop becomes a boxed "notice" set in the column */
-.brief-push { border-radius: 0; border: 0; border-top: 2px solid var(--color-ink); border-bottom: 1px solid var(--color-ink); padding-left: 0; padding-right: 0; background: transparent; }
-.brief-push__rail::before { top: 0.4rem; bottom: -0.4rem; background: var(--color-signal); }
-.brief-push__cta { border-radius: 0; }
-
-/* Updates are headlines */
-.brief-item__title { font-family: var(--font-display); font-weight: 700; font-size: 1.08rem; letter-spacing: -0.01em; }
-.brief-item:first-child .brief-item__title { font-size: 1.35rem; line-height: 1.25; }
-.brief-item.is-read .brief-item__title { font-weight: 500; }
-.brief-todo__label { font-family: var(--font-display); font-weight: 600; }
-
-/* Desktop: two columns with a column rule */
 @media (min-width: 768px) {
-  .brief-masthead .brief-frame__canvas { aspect-ratio: 2 / 1; }
+  .brief-clip .brief-frame__canvas { aspect-ratio: 16 / 9; }
 }
-@media (min-width: 1024px) {
-  .brief { max-width: 56rem; }
-  .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
-  .brief-cols > :last-child { position: relative; }
-  .brief-cols > :last-child::before { content: ""; position: absolute; left: -1.25rem; top: 2.2rem; bottom: 0; border-left: 1px solid var(--color-border); }
-}
-
-/* The week line in ink, deadlines in spot red */
-.route::before { height: 2px; background: var(--color-ink); top: calc(0.6rem + 1.05rem - 1px); }
-.route__stop span { border-width: 2px; border-color: var(--color-ink); }
-
-/* Pages: serif headlines with a double rule, notice titles as headlines */
-main h1.font-pixel { font-weight: 800; letter-spacing: -0.03em; padding-bottom: 0.35rem; }
-[role="tablist"] + div input, main input[type="search"] { border-radius: 0; }

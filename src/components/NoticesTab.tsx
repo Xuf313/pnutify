@@ -63,7 +63,7 @@ export function NoticesTab(p: Props) {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="font-pixel text-3xl font-bold text-foreground">Notices</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm font-bold text-muted-foreground">
             {counts.all} unread{p.updatedAt ? ` · updated ${relative(p.updatedAt, p.now)}` : ""}
           </p>
         </div>
@@ -71,8 +71,8 @@ export function NoticesTab(p: Props) {
           <button
             onClick={p.openSettings}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors",
-              alertOn ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted",
+              "cozy-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold",
+              alertOn ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
             )}
           >
             {alertOn ? <Bell size={14} /> : <BellOff size={14} />} Alerts {alertOn ? "on" : "off"}
@@ -80,7 +80,7 @@ export function NoticesTab(p: Props) {
         )}
       </div>
 
-      <div className="flex gap-5 overflow-x-auto border-b border-border" role="tablist" aria-label="Notice board">
+      <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pt-1 pb-1.5" role="tablist" aria-label="Notice board">
         {(["all", ...p.boards] as Filter[]).map((f) => (
           <button
             key={f}
@@ -91,13 +91,15 @@ export function NoticesTab(p: Props) {
               setLimit(PAGE);
             }}
             className={cn(
-              "relative shrink-0 whitespace-nowrap flex items-center gap-1.5 pt-1 pb-2.5 text-[15px] transition-colors",
-              filter === f ? "text-foreground font-semibold" : "text-muted-foreground font-medium hover:text-foreground",
+              "flex-1 min-w-fit whitespace-nowrap flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-extrabold border-2 transition-all",
+              filter === f
+                ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-0.5"
+                : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted",
             )}
           >
+            {f !== "all" && <BoardIcon source={f} size={15} className="hidden min-[360px]:inline shrink-0" />}
             {f === "all" ? "All" : boardInfo(f)?.short ?? f}
-            {(counts[f] ?? 0) > 0 && <span className={cn("text-xs tabular-nums", filter === f ? "text-primary" : "")}>{counts[f]}</span>}
-            <span className={cn("absolute -bottom-px inset-x-0 h-[3px] rounded-t-full bg-signal", filter === f ? "opacity-100" : "opacity-0")} aria-hidden />
+            {(counts[f] ?? 0) > 0 && <span className="text-[10px] opacity-70">{counts[f]}</span>}
           </button>
         ))}
       </div>
@@ -114,7 +116,7 @@ export function NoticesTab(p: Props) {
               setLimit(PAGE);
             }}
             placeholder="Search notices"
-            className="w-full bg-card border border-border rounded-[10px] pl-9 pr-9 py-2 text-sm focus:outline-none focus:border-primary"
+            className="w-full bg-card border-2 border-border rounded-xl pl-9 pr-9 py-2 text-sm font-bold focus:outline-none focus:border-primary"
           />
           {query && (
             <button onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground" aria-label="Clear search">
@@ -125,37 +127,34 @@ export function NoticesTab(p: Props) {
         <button
           onClick={() => setUnreadOnly((v) => !v)}
           aria-pressed={unreadOnly}
-          className={cn("cozy-btn px-3.5 py-2 text-sm font-medium", unreadOnly ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}
+          className={cn("cozy-btn px-3 py-2 text-xs font-extrabold", unreadOnly ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}
         >
           Unread
         </button>
       </div>
 
       {p.staleSources.length > 0 && (
-        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+        <p className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
           <TriangleAlert size={14} />
           The {p.staleSources.map((s) => SOURCE_LABEL[s] ?? s).join(" and ")} site didn&apos;t respond on the last check, so its list may be a little behind.
         </p>
       )}
 
       {unreadInView.length > 1 && (
-        <button onClick={() => p.onMarkRead(unreadInView.map((n) => n.id))} className="self-end text-sm font-semibold text-primary flex items-center gap-1.5 hover:underline">
+        <button onClick={() => p.onMarkRead(unreadInView.map((n) => n.id))} className="self-end text-sm font-bold text-primary flex items-center gap-1.5 hover:underline">
           <CheckCheck size={16} /> Mark {unreadInView.length} as read
         </button>
       )}
 
       {p.loading && p.notices.length === 0 ? (
-        <ul className="flex flex-col divide-y divide-border" aria-busy="true" aria-label="Loading notices">
+        <ul className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading notices">
           {Array.from({ length: 5 }, (_, i) => (
-            <li key={i} className="py-4">
-              <div className="h-4 w-4/5 rounded bg-muted animate-pulse" />
-              <div className="h-3 w-1/3 rounded bg-muted animate-pulse mt-2" />
-            </li>
+            <li key={i} className="cozy-card bg-card p-4 h-[74px] animate-pulse" />
           ))}
         </ul>
       ) : p.error && p.notices.length === 0 ? (
         <EmptyState title="Couldn't load notices">
-          <button onClick={p.onRetry} className="font-semibold text-primary inline-flex items-center gap-1 hover:underline">
+          <button onClick={p.onRetry} className="font-bold text-primary inline-flex items-center gap-1 hover:underline">
             <RefreshCw size={14} /> Try again
           </button>
         </EmptyState>
@@ -164,33 +163,33 @@ export function NoticesTab(p: Props) {
           {query ? `Nothing matches "${query}".` : unreadOnly ? "You've read everything here." : "Check back soon."}
         </EmptyState>
       ) : (
-        <ul className="flex flex-col divide-y divide-border -mt-1">
+        <ul className="flex flex-col gap-2.5">
           {filtered.slice(0, limit).map((n) => {
             const isRead = p.readIds.has(n.id);
             return (
-              <li key={n.id} className="flex items-start">
-                <button onClick={() => p.onOpenNotice(n.id)} className="group flex-1 min-w-0 text-left py-3.5 flex gap-3 items-start">
-                  <span className={cn("mt-[0.55rem] w-2 h-2 rounded-full shrink-0", isRead ? "bg-transparent" : "bg-primary")} aria-hidden />
+              <li key={n.id} className={cn("cozy-card bg-card flex items-stretch", isRead && "opacity-65 border-dashed shadow-none")}>
+                <button onClick={() => p.onOpenNotice(n.id)} className="flex-1 min-w-0 text-left p-3.5 flex gap-3 items-start">
+                  <span className="w-9 h-9 rounded-xl bg-background border-2 border-border flex items-center justify-center shrink-0" aria-hidden>
+                    <BoardIcon source={n.source} size={16} className={n.source === "cse" ? "text-secondary" : "text-primary"} />
+                  </span>
                   <span className="flex-1 min-w-0">
-                    <span className={cn("block leading-snug group-hover:underline underline-offset-[3px] decoration-1", isRead ? "font-display text-[1.05rem] text-muted-foreground" : "font-display font-bold text-[1.05rem] tracking-[-0.01em] text-foreground")}>{n.title}</span>
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[13px] text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
-                        <BoardIcon source={n.source} size={13} className="text-muted-foreground" />
-                        {SOURCE_LABEL[n.source]}
-                      </span>
-                      <span className="tabular-nums">{n.date}</span>
+                    <span className={cn("block font-bold text-foreground leading-snug", isRead && "font-semibold")}>{n.title}</span>
+                    <span className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       {!isRead && isNewNotice(n, p.now) && <Pill tone="primary">New</Pill>}
                       {n.pinned && (
                         <Pill>
                           <Pin size={10} /> Pinned
                         </Pill>
                       )}
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {SOURCE_LABEL[n.source]} · {n.date}
+                      </span>
                     </span>
                   </span>
                 </button>
                 <button
                   onClick={() => p.onMarkRead([n.id], !isRead)}
-                  className="mt-2.5 ml-1 p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-muted"
+                  className="px-3 border-l-2 border-dashed border-border/30 text-muted-foreground hover:text-primary"
                   aria-label={isRead ? `Mark "${n.title}" as unread` : `Mark "${n.title}" as read`}
                   title={isRead ? "Mark as unread" : "Mark as read"}
                 >
@@ -203,7 +202,7 @@ export function NoticesTab(p: Props) {
       )}
 
       {filtered.length > limit && (
-        <button onClick={() => setLimit((l) => l + PAGE)} className="cozy-btn bg-card font-medium py-2.5 text-sm">
+        <button onClick={() => setLimit((l) => l + PAGE)} className="cozy-btn bg-card font-extrabold py-2.5 text-sm">
           Show {Math.min(PAGE, filtered.length - limit)} more
         </button>
       )}

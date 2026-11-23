@@ -632,47 +632,48 @@ function App() {
         <header
           // Solid, not translucent: iOS treats an opaque bar at the top as the top bar and doesn't
           // blur it into the status bar area (a see-through, blurred header came out fuzzy there).
-          className="sticky top-0 z-20 px-5 pb-3 flex items-center justify-between bg-background"
+          className="sticky top-0 z-20 px-5 pb-3 flex items-center justify-between bg-background border-b-2 border-dashed border-border/20"
           style={{ paddingTop: "max(0.9rem, env(safe-area-inset-top))" }}
         >
-          <div className="flex items-center gap-3">
-            <AppLogo size={30} />
-            <div className="leading-none">
-              <p className="font-display text-[1.35rem] font-bold text-foreground tracking-[-0.02em]">PNUtify</p>
-              <p className="text-xs font-medium text-muted-foreground mt-1">{formatDate(now, { weekday: "long", month: "long", day: "numeric" })}</p>
+          <div className="flex items-center gap-2.5">
+            <AppLogo size={34} className="-rotate-2" />
+            <div>
+              <p className="font-pixel text-2xl font-bold leading-none text-foreground">PNUtify</p>
+              <p className="text-xs font-bold text-primary mt-0.5">{formatDate(now, { weekday: "long", month: "short", day: "numeric" })}</p>
             </div>
           </div>
-          <button onClick={() => setSettingsOpen(true)} className="p-2 -mr-2 rounded-full text-foreground hover:bg-muted" aria-label="Settings">
-            <Settings size={21} />
+          <button onClick={() => setSettingsOpen(true)} className="cozy-btn bg-card p-2 text-foreground" aria-label="Settings">
+            <Settings size={20} />
           </button>
         </header>
 
-        <main className="flex-1 px-5 pt-3" style={{ paddingBottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}>
+        <main className="flex-1 px-5 pt-4" style={{ paddingBottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}>
           {content}
         </main>
 
         <nav
-          className="fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          className="fixed bottom-0 inset-x-0 z-30 px-4 pt-6 bg-gradient-to-t from-background via-background/95 to-transparent"
+          style={{ paddingBottom: "max(0.9rem, env(safe-area-inset-bottom))" }}
           aria-label="Sections"
         >
-          <div className="flex">
+          <div className="cozy-card bg-card p-1.5 flex rounded-3xl">
             {NAV.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
                 aria-current={tab === id ? "page" : undefined}
                 className={cn(
-                  "relative flex-1 flex flex-col items-center gap-1 pt-2.5 pb-2 transition-colors",
-                  tab === id ? "text-foreground" : "text-muted-foreground",
+                  "nav-tab relative flex-1 flex flex-col items-center gap-0.5 py-2 rounded-2xl border-2",
+                  // The active tab is a raised button, like the cards; tapping presses it down.
+                  tab === id
+                    ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-x-px -translate-y-px"
+                    : "border-transparent text-muted-foreground",
                 )}
               >
-                {/* The active tab is marked by a stretch of the line. */}
-                <span className={cn("absolute top-0 inset-x-[28%] h-[3px] rounded-b-full bg-signal transition-opacity", tab === id ? "opacity-100" : "opacity-0")} aria-hidden />
-                <Icon size={22} strokeWidth={tab === id ? 2.3 : 1.8} />
-                <span className={cn("text-[11px]", tab === id ? "font-semibold" : "font-medium")}>{label}</span>
+                <Icon size={22} />
+                <span className="text-[11px] font-extrabold">{label}</span>
                 {badge(id) > 0 && (
-                  <span className="absolute top-1.5 left-[54%] min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center ring-2 ring-card">
+                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-secondary text-secondary-foreground text-[11px] font-extrabold flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
                     {badge(id) > 99 ? "99+" : badge(id)}
                   </span>
                 )}
@@ -684,45 +685,56 @@ function App() {
 
       {/* ---------- tablet / desktop ---------- */}
       <div className="hidden md:flex h-[100dvh] overflow-hidden">
-        <aside className="w-60 lg:w-64 shrink-0 flex flex-col border-r border-border bg-card">
-          <div className="px-6 pt-8 pb-7">
+        <aside className="w-64 lg:w-72 shrink-0 flex flex-col border-r-2 border-border bg-card/80 backdrop-blur-sm">
+          <div className="px-6 pt-8 pb-6 border-b-2 border-dashed border-border/30">
+            <div className="washi-tape text-[11px] font-extrabold tracking-widest px-3 py-1 inline-block mb-4 -rotate-1">부산대학교</div>
             <div className="flex items-center gap-3">
-              <AppLogo size={34} />
-              <h1 className="font-display text-[1.6rem] font-bold text-foreground tracking-[-0.02em]">PNUtify</h1>
+              <AppLogo size={44} className="-rotate-2" />
+              <h1 className="font-pixel text-3xl font-bold text-foreground">PNUtify</h1>
             </div>
-            <p className="text-sm text-muted-foreground mt-5">{formatDate(now, { weekday: "long" })}</p>
-            <p className="font-display text-2xl font-semibold text-foreground tracking-[-0.01em]">{formatDate(now, { month: "long", day: "numeric" })}</p>
+            <p className="text-xs font-bold text-muted-foreground mt-3">{formatDate(now, { weekday: "long" })}</p>
+            <p className="font-pixel text-2xl font-bold text-primary">{formatDate(now, { month: "short", day: "numeric" })}</p>
           </div>
-          <nav className="flex-1 px-3 flex flex-col gap-0.5" aria-label="Sections">
+          <nav className="flex-1 px-4 py-6 flex flex-col gap-2" aria-label="Sections">
             {NAV.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
                 aria-current={tab === id ? "page" : undefined}
                 className={cn(
-                  "relative w-full flex items-center gap-3 pl-5 pr-3 py-2.5 rounded-[10px] text-[15px] transition-colors",
-                  tab === id ? "bg-muted text-foreground font-semibold" : "text-muted-foreground font-medium hover:bg-muted/60 hover:text-foreground",
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm border-2 transition-all",
+                  tab === id
+                    ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-y-0.5"
+                    : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                 )}
               >
-                <span className={cn("absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-signal", tab === id ? "opacity-100" : "opacity-0")} aria-hidden />
-                <Icon size={19} strokeWidth={tab === id ? 2.2 : 1.8} />
-                <span>{label}</span>
-                {badge(id) > 0 && <span className="ml-auto text-xs font-semibold text-primary tabular-nums">{badge(id)}</span>}
+                <Icon size={20} />
+                <span className="font-pixel tracking-wide">{label}</span>
+                {badge(id) > 0 && (
+                  <span
+                    className={cn(
+                      "ml-auto text-[11px] font-extrabold px-1.5 py-0.5 rounded-md border",
+                      tab === id ? "bg-primary-foreground/20 border-primary-foreground/30" : "bg-primary text-primary-foreground border-border",
+                    )}
+                  >
+                    {badge(id)}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
-          <div className="px-3 py-5 border-t border-border">
+          <div className="px-4 py-5 border-t-2 border-dashed border-border/30">
             <button
               onClick={() => setSettingsOpen(true)}
-              className="w-full flex items-center gap-3 pl-5 pr-3 py-2.5 rounded-[10px] text-[15px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm border-2 border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
             >
-              <Settings size={19} strokeWidth={1.8} />
-              <span>Settings & alerts</span>
+              <Settings size={20} />
+              <span className="font-pixel tracking-wide">Settings & alerts</span>
             </button>
           </div>
         </aside>
-        <main className="flex-1 overflow-y-auto px-8 lg:px-14 py-10">
-          <div className="max-w-[44rem] mx-auto">{content}</div>
+        <main className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
+          <div className="max-w-3xl mx-auto">{content}</div>
         </main>
       </div>
 

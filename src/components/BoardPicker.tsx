@@ -37,13 +37,13 @@ export function BoardPicker({ boards, setBoards }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col divide-y divide-border" aria-label="Boards on this device">
+      <ul className="flex flex-col divide-y-2 divide-dashed divide-border/20" aria-label="Boards on this device">
         {shown.map((b) => (
           <li key={b.id} className="flex items-center justify-between gap-3 py-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
               <BoardIcon source={b.id} size={18} className="text-primary shrink-0" />
               <div className="min-w-0">
-                <p className="font-semibold text-foreground truncate">{b.label}</p>
+                <p className="font-bold text-foreground truncate">{b.label}</p>
                 <p className="text-sm text-muted-foreground truncate">{b.core ? b.name : COLLEGE_LABEL[b.college] ?? b.college}</p>
               </div>
             </div>
@@ -62,15 +62,15 @@ export function BoardPicker({ boards, setBoards }: Props) {
       </ul>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-foreground">Add a department</p>
-        <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+        <p className="text-sm font-extrabold text-foreground">Add a department</p>
+        <label className="flex items-center gap-2 rounded-xl border-2 border-border bg-card px-3 py-2">
           <Search size={16} className="text-muted-foreground shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search: 수학과, 경영, 공과대학…"
             aria-label="Search departments"
-            className="w-full bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground"
+            className="w-full bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground"
           />
           {query && (
             <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="text-muted-foreground">
@@ -83,7 +83,7 @@ export function BoardPicker({ boards, setBoards }: Props) {
         {groups.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">{q ? "No department matches that." : "Every board is already on."}</p>
         ) : (
-          <ul className="flex flex-col rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
+          <ul className="flex flex-col rounded-xl border-2 border-border bg-card divide-y-2 divide-border/15 overflow-hidden">
             {groups.map((g) => {
               // While searching, every matching group is open.
               const open = Boolean(q) || openCollege === g.college;
@@ -95,10 +95,10 @@ export function BoardPicker({ boards, setBoards }: Props) {
                     aria-expanded={open}
                     className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
                   >
-                    <span className="font-semibold text-foreground">{COLLEGE_LABEL[g.college] ?? g.college}</span>
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <span className="font-bold text-foreground">{COLLEGE_LABEL[g.college] ?? g.college}</span>
+                    <span className="flex items-center gap-1.5 text-xs font-extrabold text-muted-foreground">
                       {g.boards.length}
-                      <ChevronDown size={16} className={cn("transition-transform", open && "")} />
+                      <ChevronDown size={16} className={cn("transition-transform", open && "rotate-180")} />
                     </span>
                   </button>
                   {open && (
@@ -106,7 +106,7 @@ export function BoardPicker({ boards, setBoards }: Props) {
                       {g.boards.map((b) => (
                         <li key={b.id} className="flex items-center justify-between gap-3 pl-5 pr-3 py-1.5">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">{b.core ? `${b.label} · ${b.name}` : b.name}</p>
+                            <p className="text-sm font-bold text-foreground truncate">{b.core ? `${b.label} · ${b.name}` : b.name}</p>
                             {b.aliases.length > 0 && <p className="text-xs text-muted-foreground truncate">also {b.aliases.join(", ")}</p>}
                           </div>
                           <button
@@ -114,7 +114,7 @@ export function BoardPicker({ boards, setBoards }: Props) {
                             onClick={() => add(b.id)}
                             disabled={full}
                             aria-label={`Add ${b.label}`}
-                            className="cozy-btn shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-primary text-primary-foreground disabled:opacity-40"
+                            className="cozy-btn shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-extrabold bg-primary text-primary-foreground disabled:opacity-40"
                           >
                             <Plus size={13} /> Add
                           </button>

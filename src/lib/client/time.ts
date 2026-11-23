@@ -79,3 +79,11 @@ export function greeting(now = Date.now()): string {
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
 }
+
+/** Korean-style countdown by calendar day (Korea time): "D-3", "D-DAY", "D+1" (a day overdue). */
+export function dday(due: number, now = Date.now()): { label: string; tone: 'over' | 'today' | 'soon' | 'later' } {
+  const days = Math.round((startOfKstDay(due) - startOfKstDay(now)) / 86_400_000);
+  if (due < now) return { label: days < 0 ? `D+${-days}` : 'D-DAY', tone: 'over' };
+  if (days === 0) return { label: 'D-DAY', tone: 'today' };
+  return { label: `D-${days}`, tone: days <= 2 ? 'soon' : 'later' };
+}
