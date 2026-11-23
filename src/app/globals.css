@@ -343,3 +343,23 @@ body {
   .brief-frame__canvas img, .brief-star, .brief-source, .brief-check { transition: none; }
   .brief-frame:hover .brief-frame__canvas img { transform: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   A notice read inside the app (markup rebuilt server-side)
+   ══════════════════════════════════════════════════════════════ */
+.notice-body { font-size: 0.95rem; line-height: 1.65; color: var(--color-foreground); overflow-wrap: anywhere; }
+.notice-body p, .notice-body div { margin: 0 0 0.55rem; }
+.notice-body div > div, .notice-body li > p { margin-bottom: 0; }
+.notice-body strong { font-weight: 800; }
+.notice-body h4 { font-weight: 800; font-size: 1.02rem; margin: 1rem 0 0.4rem; }
+.notice-body a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; font-weight: 700; }
+.notice-body ul, .notice-body ol { margin: 0 0 0.6rem 1.25rem; }
+.notice-body ul { list-style: disc; }
+.notice-body ol { list-style: decimal; }
+.notice-body img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.4rem 0; }
+.notice-body hr { border: 0; border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 30%, transparent); margin: 1rem 0; }
+.notice-body blockquote { border-left: 3px solid var(--color-muted); padding-left: 0.75rem; color: var(--color-muted-foreground); }
+/* Wide tables scroll sideways instead of stretching the sheet. */
+.notice-body table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.85rem; }
+.notice-body td, .notice-body th { border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent); padding: 0.35rem 0.5rem; vertical-align: top; min-width: 4rem; }
+.notice-body th { background: var(--color-muted); font-weight: 800; }

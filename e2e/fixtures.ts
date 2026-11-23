@@ -60,7 +60,18 @@ export function ownerData(now = Date.now()) {
 /** Answers the app's own API calls in the browser. Owner endpoints say "not the owner" unless `owner` is set. */
 export async function mockApis(page: Page, opts: { owner?: boolean } = {}) {
   await page.route('**/api/notices**', (r) => r.fulfill({ json: noticeSnapshot() }));
-  await page.route('**/api/notices/notice-detail**', (r) => r.fulfill({ json: { title: 'Full notice title', sourceUrl: 'https://cse.pusan.ac.kr/' } }));
+  await page.route('**/api/notices/notice-detail**', (r) =>
+    r.fulfill({
+      json: {
+        title: '[장학] 국가장학금 신청 안내',
+        html: '<p><strong>신청기간: 11/24 ~ 1/7</strong></p><p>Apply on the KOSAF site.</p><table><tr><th>구분</th><th>기간</th></tr><tr><td>1차</td><td>11/24 ~ 1/7</td></tr></table>',
+        attachments: [{ name: '붙임1. 안내문.pdf', url: 'https://cse.pusan.ac.kr/bbs/cse/2055/1/download.do' }],
+        author: '정*랑',
+        date: '2026.11.19',
+        sourceUrl: 'https://cse.pusan.ac.kr/bbs/cse/2055/101/artclView.do',
+      },
+    }),
+  );
   await page.route('**/api/tasks/sync', (r) => r.fulfill({ json: { ok: true } }));
   await page.route('**/api/push/**', (r) => r.fulfill({ json: { categories: { cse: false, international: false, tasks: false, courses: false }, subscribed: false } }));
   if (opts.owner) {

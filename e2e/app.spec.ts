@@ -46,10 +46,20 @@ test.describe('Notices', () => {
     await noSidewaysScroll(page);
   });
 
-  test('opens a notice', async ({ page }) => {
+  test('reads a notice inside the app', async ({ page }) => {
     await page.goto('/?tab=notices');
-    await visible(page, 'main').getByText('[장학] 국가장학금 신청 안내').click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    const main = visible(page, 'main');
+    await main.getByText('[장학] 국가장학금 신청 안내').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('.notice-body')).toContainText('신청기간: 11/24 ~ 1/7');
+    await expect(dialog.locator('.notice-body table')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: '붙임1. 안내문.pdf' })).toHaveAttribute('href', /download\.do$/);
+    await expect(dialog.getByText('Posted 2026.11.19 · 정*랑')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: /Open on the CSE site/ })).toBeVisible();
+    // Reading it marks it read.
+    await expect(dialog.getByRole('button', { name: 'Mark unread' })).toBeVisible();
+    // Long tables scroll inside the sheet rather than widening the page.
+    await noSidewaysScroll(page);
   });
 });
 
