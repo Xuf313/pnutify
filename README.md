@@ -106,7 +106,16 @@ npm test
 - `src/lib/__tests__/scrapeNotices.test.ts` runs the parser against saved copies of both real boards (`src/lib/__tests__/fixtures/`). When a board changes its layout, save the new page there and fix the parser until the tests pass.
 - `src/lib/__tests__/push.test.ts` runs the alert cycle against an in-memory Redis. It checks that each notice is pushed once and reminders aren't repeated, and that a quiet run stays cheap.
 
-CI runs lint, tests and the build on every pull request.
+Browser tests (Playwright, phone and desktop layouts) run against the production build:
+
+```bash
+npm run build
+npm run test:e2e
+```
+
+They live in `e2e/`. The app's API calls are answered with test data, so they never touch the university sites, Redis or push services. One test calls the real server to check that owner data is refused to visitors.
+
+CI runs lint, unit tests, the build and the browser tests on every pull request.
 
 ## Contributing
 
