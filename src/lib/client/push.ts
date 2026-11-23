@@ -1,7 +1,7 @@
 import type { AlertCategories } from './types';
 import { getDeviceId } from './storage';
 
-export const NO_ALERTS: AlertCategories = { cse: false, international: false, pnu: false, tasks: false, weekly: false, courses: false };
+export const NO_ALERTS: AlertCategories = { cse: false, international: false, tasks: false, weekly: false, courses: false };
 
 export type PushSupport =
   | { ok: true }

@@ -123,30 +123,17 @@ test.describe('Boards', () => {
   test('a board can be hidden, and it disappears from the lists', async ({ page }) => {
     await page.goto('/?tab=notices');
     const main = visible(page, 'main');
-    await expect(main.getByRole('tab', { name: /PNU/ })).toBeVisible();
-    await expect(main.getByText('[학사과] 겨울계절수업 교류 수학 안내')).toBeVisible();
+    await expect(main.getByRole('tab', { name: /Intl/ })).toBeVisible();
+    await expect(main.getByText('Visa document review hours')).toBeVisible();
 
     await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
-    await page.getByRole('dialog').getByRole('switch', { name: 'Show PNU notices' }).click();
+    await page.getByRole('dialog').getByRole('switch', { name: 'Show International notices' }).click();
     await page.keyboard.press('Escape');
 
-    await expect(main.getByRole('tab', { name: /PNU/ })).toHaveCount(0);
-    await expect(main.getByText('[학사과] 겨울계절수업 교류 수학 안내')).toHaveCount(0);
+    await expect(main.getByRole('tab', { name: /Intl/ })).toHaveCount(0);
+    await expect(main.getByText('Visa document review hours')).toHaveCount(0);
     // Remembered on this device.
     await page.reload();
-    await expect(visible(page, 'main').getByRole('tab', { name: /PNU/ })).toHaveCount(0);
-  });
-
-  test('a board new to an existing user arrives with its older notices already read', async ({ page }) => {
-    // Someone who used PNUtify before the PNU board existed.
-    await page.addInitScript(() => {
-      if (localStorage.getItem('read_seed_v1')) return;
-      localStorage.setItem('read_seed_v1', '"done"');
-      localStorage.setItem('notice_read_v3', JSON.stringify(['cse_101', 'intl_201', 'cse_102', 'cse_103', 'intl_202']));
-    });
-    await page.goto('/?tab=notices');
-    const main = visible(page, 'main');
-    await expect(main.getByText('[학사과] 겨울계절수업 교류 수학 안내')).toBeVisible();
-    await expect(main.getByText(/^0 unread/)).toBeVisible();
+    await expect(visible(page, 'main').getByRole('tab', { name: /Intl/ })).toHaveCount(0);
   });
 });

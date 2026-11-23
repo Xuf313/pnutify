@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   articleIdFromUrl,
   BOARDS,
+  type Board,
   dedupeNotices,
   extractArticleTitle,
   fetchFullTitle,
@@ -180,8 +181,9 @@ describe('scrapeBoard', () => {
   });
 });
 
-describe('the university-wide PNU board (a different CMS)', () => {
-  const PNU = BOARDS.find((b) => b.source === 'pnu')!;
+describe('boards on PNU\'s CMS/Board system (e.g. the university-wide board)', () => {
+  // Not one of the app's boards; kept so the parser keeps supporting this layout.
+  const PNU = { source: 'pnu', label: 'PNU', name: '부산대학교 공지사항', url: 'https://www.pusan.ac.kr/kor/CMS/Board/Board.do?mCode=MN095', origin: 'https://www.pusan.ac.kr', idPrefix: 'pnu', titleCut: Infinity } as unknown as Board;
   const { notices } = parseBoardPage(fixture('pnu-list'), PNU);
 
   it('reads the list with board_seq ids and links that resolve against the list page', () => {
@@ -199,6 +201,6 @@ describe('the university-wide PNU board (a different CMS)', () => {
     const n = notices.find((x) => x.id === 'pnu_1512342')!;
     expect(n.title).toBe('[학생성공개발원 현장실습지원센터] 2026학년도동계 글로벌 현장실무 프로젝트 추가 모집 안내(~11.25)');
     expect(mayBeCutOff(n)).toBe(false);
-    expect(mayBeCutOff({ source: 'pnu', title: '[학생과] 국가장학금 1차 신청 기간...' })).toBe(true);
+    expect(mayBeCutOff({ source: 'cse', title: '[학생과] 국가장학금 1차 신청 기간...' })).toBe(true);
   });
 });

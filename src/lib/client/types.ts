@@ -1,4 +1,4 @@
-export type NoticeSource = 'cse' | 'international' | 'pnu';
+export type NoticeSource = 'cse' | 'international';
 
 export type Notice = {
   id: string;
@@ -68,7 +68,6 @@ export type CoursePost = { id: string; title: string; source: 'PLATO' | 'NESPA';
 export const BOARDS: { id: NoticeSource; label: string; short: string; name: string }[] = [
   { id: 'cse', label: 'CSE', short: 'CSE', name: '정보컴퓨터공학부' },
   { id: 'international', label: 'International', short: 'Intl.', name: '국제처' },
-  { id: 'pnu', label: 'PNU', short: 'PNU', name: '부산대학교 공지사항' },
 ];
 export const BOARD_IDS = BOARDS.map((b) => b.id);
 export const SOURCE_LABEL = Object.fromEntries(BOARDS.map((b) => [b.id, b.label])) as Record<NoticeSource, string>;

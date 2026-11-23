@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 
-export type NoticeSource = 'cse' | 'international' | 'pnu';
+export type NoticeSource = 'cse' | 'international';
 
 export type ScrapedNotice = {
   id: string;
@@ -30,8 +30,8 @@ export type Board = {
 export const BOARDS: Board[] = [
   { source: 'cse', label: 'CSE', name: '정보컴퓨터공학부', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse', titleCut: 50 },
   { source: 'international', label: 'International', name: '국제처', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl', titleCut: 60 },
-  // The university-wide board (all departments post here). A different CMS: relative links, board_seq ids, "..." cut-offs.
-  { source: 'pnu', label: 'PNU', name: '부산대학교 공지사항', url: 'https://www.pusan.ac.kr/kor/CMS/Board/Board.do?mCode=MN095', origin: 'https://www.pusan.ac.kr', idPrefix: 'pnu', titleCut: Infinity },
+  // The parser also reads boards on PNU's "CMS/Board" system (relative "?…&board_seq=" links, "..." cut-off
+  // titles, a different article layout), used by www.pusan.ac.kr and some department sites.
 ];
 
 // Rolling window instead of a hard-coded semester date, so the app keeps
@@ -296,7 +296,8 @@ export async function checkFirstPages(now = Date.now()): Promise<FirstPageResult
  */
 export function mayBeCutOff(n: Pick<ScrapedNotice, 'title' | 'source'>): boolean {
   const board = BOARDS.find((b) => b.source === n.source);
-  return board !== undefined && (n.title.length >= board.titleCut - 1 || /(\.\.\.|…)$/.test(n.title));
+  // A trailing "..." always means cut; otherwise the board's known cut length.
+  return /(\.\.\.|…)$/.test(n.title) || (board !== undefined && n.title.length >= board.titleCut - 1);
 }
 
 /** A listed title without a trailing "..." cut marker, for comparing with the full one. */

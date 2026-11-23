@@ -9,14 +9,13 @@ import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData 
 /** One switch per board, plus deadlines; `courses` (PLATO and NESPA posts) only applies to owner devices. */
 export type Categories = Record<NoticeSource, boolean> & { tasks: boolean; weekly: boolean; courses: boolean };
 /** Nothing is on until the student turns it on. */
-export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, pnu: false, tasks: false, weekly: false, courses: false };
+export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, tasks: false, weekly: false, courses: false };
 
 export function normalizeCategories(value: unknown): Categories {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   return {
     cse: v.cse === true,
     international: v.international === true,
-    pnu: v.pnu === true,
     tasks: v.tasks === true,
     weekly: v.weekly === true,
     courses: v.courses === true,

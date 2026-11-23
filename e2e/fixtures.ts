@@ -26,8 +26,6 @@ export function noticeSnapshot(now = Date.now()) {
       n('cse_102', 'cse', '건물 출입 통제 알림', 20),
       n('cse_103', 'cse', 'Old pinned notice about graduation requirements', 24 * 40, true),
       n('intl_202', 'international', 'Visa document review hours', 24 * 10),
-      n('pnu_301', 'pnu', '[학사과] 겨울계절수업 교류 수학 안내', 24 * 5),
-      n('pnu_302', 'pnu', '[학생과] 국가장학금 1차 신청 기간 안내', 24 * 6),
     ],
   };
 }

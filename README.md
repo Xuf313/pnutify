@@ -7,7 +7,7 @@ Live at **https://www.pnutify.app**. Add it to your home screen to use it like a
 ## Features
 
 - **Briefing:** today at a glance. It shows overdue tasks, today's and this week's deadlines, a 7-day load strip, and the notices that are new since your last visit.
-- **Notices:** the CSE (정보컴퓨터공학부), International (국제처) and university-wide (부산대학교 공지사항) boards, merged and de-duplicated, with search, unread filter, "New" and "Pinned" badges, mark-all-read and share. Each student picks which boards to show (Settings → Boards), and notices open inside the app with their attachments.
+- **Notices:** the CSE (정보컴퓨터공학부) and International (국제처) boards, merged and de-duplicated, with search, unread filter, "New" and "Pinned" badges, mark-all-read and share. Each student picks which boards to show (Settings → Boards), and notices open inside the app with their attachments.
 - **Tasks:** your own assignments and exams with due dates in KST, grouped into Overdue, Today, This week and Later.
 - **Calendar:** a month view of your deadlines.
 - **Alerts:** web push for new CSE or International notices, usually within a minute or two of posting, and reminders 24 hours and 1 hour before a task is due. Each category can be turned on or off on its own, and you can send yourself a test alert.
