@@ -11,6 +11,8 @@ Live at **https://www.pnutify.app**. Add it to your home screen to use it like a
 - **Tasks:** your own assignments and exams with due dates in KST, grouped into Overdue, Today, This week and Later.
 - **Calendar:** a month view of your deadlines.
 - **Alerts:** web push for new CSE or International notices, usually within a minute or two of posting, and reminders 24 hours and 1 hour before a task is due. Each category can be turned on or off on its own, and you can send yourself a test alert.
+- **Sync across devices:** no account needed. Settings → Sync across devices gives a code to enter on your other device; tasks and read notices then stay the same on both. The server keeps the shared copy under a hash of the code, never the code itself.
+- **Weekly preview:** an optional alert on Sunday at 8 pm (Korea time) with the coming week's deadlines, day by day.
 - Installable PWA with 5 themes, including a dark Night theme.
 
 ## How it works
@@ -94,7 +96,7 @@ iOS only allows web push for sites added to the home screen (iOS 16.4+). The app
 ## Privacy
 
 - PNUtify never asks for a university login. Older versions stored a PLATO login in the browser; this version deletes it on first load.
-- Tasks and read history stay in the browser.
+- Tasks and read history stay in the browser, unless you turn on sync. Then a copy is stored under a hash of your sync code; anyone with the code can read and change it, so it shouldn't be shared.
 - When deadline reminders are on, only the title, course and due time of upcoming tasks are sent to the server, so it can send the reminders. Turning reminders off clears that copy.
 
 ## Tests

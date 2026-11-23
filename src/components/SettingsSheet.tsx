@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, BookOpen, CircleCheck, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
+import { Bell, BookOpen, CircleCheck, Copy, Link2, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
 import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
 import { formatDue, relative } from "@/lib/client/time";
@@ -24,6 +24,13 @@ type Props = {
   /** Boards this device shows. */
   boards: NoticeSource[];
   setBoards: (b: NoticeSource[]) => void;
+  syncCode: string | null;
+  syncActions: {
+    create: () => Promise<string | null>;
+    join: (code: string) => Promise<"ok" | "unknown" | "error">;
+    leave: () => void;
+    wipe: () => Promise<void>;
+  };
   isOwner: boolean;
   ownerData: OwnerData | null;
   ownerActions: {
@@ -153,6 +160,9 @@ export function SettingsSheet(p: Props) {
           </ul>
         </section>
 
+        {/* ---------- sync across devices (owner devices already sync) ---------- */}
+        {!p.isOwner && <SyncSection code={p.syncCode} actions={p.syncActions} />}
+
         {/* ---------- PLATO + NESPA (owner devices only) ---------- */}
         {p.isOwner && <OwnerSection data={p.ownerData} actions={p.ownerActions} />}
 
@@ -222,7 +232,7 @@ export function SettingsSheet(p: Props) {
           </h3>
           <ul className="text-sm text-muted-foreground flex flex-col gap-1.5 list-disc pl-5">
             <li>No account and no PLATO password. PNUtify never asks for your student login.</li>
-            <li>Your tasks and read notices stay in this browser.</li>
+            <li>Your tasks and read notices stay in this browser, unless you turn on sync. Then a copy is kept on the server under your sync code, and only devices with that code can read it.</li>
             <li>If deadline reminders are on, the titles and due times of your upcoming tasks are stored on the server only to send those reminders.</li>
           </ul>
           <button
@@ -484,5 +494,127 @@ function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
         </p>
       )}
     </form>
+  );
+}
+
+function SyncSection({ code, actions }: { code: string | null; actions: Props["syncActions"] }) {
+  const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
+  const [input, setInput] = useState("");
+  const [shown, setShown] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const copy = async () => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setNote("Copied. Enter it on your other device: Settings → Sync across devices → Enter a code.");
+    } catch {
+      setShown(true);
+    }
+  };
+
+  return (
+    <section>
+      <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+        <Link2 size={18} className="text-primary" /> Sync across devices
+      </h3>
+      {code ? (
+        <>
+          <p className="text-sm text-muted-foreground mb-2">Your tasks and read notices sync with every device that uses this code.</p>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <code className="rounded-lg bg-muted px-2.5 py-1.5 text-sm font-bold tracking-wider text-foreground" aria-label="Your sync code">
+              {shown ? code : code.replace(/[^-]/g, "•")}
+            </code>
+            <button onClick={() => setShown((v) => !v)} className="text-sm font-bold text-primary hover:underline">
+              {shown ? "Hide" : "Show"}
+            </button>
+            <button onClick={copy} className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+              <Copy size={14} /> Copy
+            </button>
+          </div>
+          <p className="text-xs font-bold text-muted-foreground mb-3">Anyone with this code can see and change your tasks. Don&apos;t share it with anyone else.</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <button onClick={actions.leave} className="text-sm font-bold text-muted-foreground hover:text-foreground">
+              Stop syncing on this device
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm("Delete the synced copy? Your other devices will stop syncing too. Each keeps its own data.")) return;
+                await actions.wipe();
+              }}
+              className="text-sm font-bold text-[#E5484D] hover:underline"
+            >
+              Delete synced data
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground mb-3">Keep your tasks and read notices the same on your phone and laptop. No account needed: you get a code to enter on your other device.</p>
+          {entering ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                setNote(null);
+                const r = await actions.join(input);
+                setBusy(false);
+                if (r === "ok") {
+                  setEntering(false);
+                  setInput("");
+                  setNote("Linked. This device now syncs.");
+                } else setNote(r === "unknown" ? "That code doesn't exist. Check it and try again." : "Couldn't reach the server. Try again.");
+              }}
+            >
+              <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider" htmlFor="sync-code">
+                Sync code from your other device
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="sync-code"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  className="flex-1 min-w-0 rounded-xl border-2 border-border bg-background px-3 py-2 text-sm font-bold tracking-wider"
+                />
+                <button disabled={busy || input.replace(/[\s-]/g, "").length < 20} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50">
+                  Link
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setNote(null);
+                  const made = await actions.create();
+                  setBusy(false);
+                  if (made) setShown(true);
+                  else setNote("Couldn't create a code right now. Try again.");
+                }}
+                className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50"
+              >
+                Create a sync code
+              </button>
+              <button onClick={() => setEntering(true)} className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold">
+                Enter a code
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {note && (
+        <p role="status" className="mt-2 text-sm font-bold">
+          {note}
+        </p>
+      )}
+    </section>
   );
 }

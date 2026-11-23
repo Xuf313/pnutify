@@ -13,6 +13,7 @@ import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveThem
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
 import { BOARD_IDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
+import { createSyncCode, deleteSyncCode, pushSyncCode, readSyncCode } from "@/lib/client/syncCode";
 import { formatDate } from "@/lib/client/time";
 import { isFreshNotice } from "@/lib/client/notices";
 
@@ -263,11 +264,16 @@ function App() {
     write(KEYS.deletedTasks, deletedTasks);
   }, [external, deletedTasks]);
 
-  // ---------- owner mode: PLATO/NESPA data and syncing across the owner's devices ----------
-  const latest = useRef({ tasks, readIds, external, deletedTasks, isOwner });
+  // ---------- syncing across devices: the owner's devices, or any student's via a sync code ----------
+  const [syncCode, setSyncCodeState] = useState<string | null>(() => read<string | null>(KEYS.syncCode, null));
+  const setSyncCode = useCallback((code: string | null) => {
+    setSyncCodeState(code);
+    write(KEYS.syncCode, code);
+  }, []);
+  const latest = useRef({ tasks, readIds, external, deletedTasks, isOwner, syncCode });
   // Declared before the effects below, so they always see this render's values.
   useEffect(() => {
-    latest.current = { tasks, readIds, external, deletedTasks, isOwner };
+    latest.current = { tasks, readIds, external, deletedTasks, isOwner, syncCode };
   });
   const localVersion = useRef(0);
   const applyingRemote = useRef(false);
@@ -287,19 +293,63 @@ function App() {
     }
   }, []);
 
-  /** Sends this device's tasks and read state; adopts the merged copy unless something changed meanwhile. */
-  const syncState = useCallback(async () => {
-    const cur = latest.current;
-    if (!cur.isOwner) return;
-    const version = localVersion.current;
-    const merged = await pushOwnerState({ tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external });
-    if (!merged || localVersion.current !== version) return;
+  const adoptMerged = useCallback((merged: SyncState) => {
     applyingRemote.current = true;
     setTasks(merged.tasks.map((t) => ({ ...t, source: "own" as const })));
     setReadIds(new Set(merged.readIds));
-    setExternal(merged.external);
-    setDeletedTasks(merged.deleted);
+    setExternal(merged.external ?? {});
+    setDeletedTasks(merged.deleted ?? {});
   }, []);
+
+  /** Sends this device's tasks and read state; adopts the merged copy unless something changed meanwhile. */
+  const syncState = useCallback(async () => {
+    const cur = latest.current;
+    if (!cur.isOwner && !cur.syncCode) return;
+    const version = localVersion.current;
+    const mine: SyncState = { tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external };
+    // The owner's devices sync through owner mode; everyone else through their sync code.
+    const merged = cur.isOwner ? await pushOwnerState(mine) : await pushSyncCode(cur.syncCode!, mine);
+    if (merged === "unknown") {
+      // The synced copy was deleted from another device: stop syncing here, keep the local data.
+      setSyncCode(null);
+      return;
+    }
+    if (!merged || localVersion.current !== version) return;
+    adoptMerged(merged);
+  }, [adoptMerged, setSyncCode]);
+
+  const syncActions = useMemo(
+    () => ({
+      /** Starts syncing: uploads this device's data and returns the new code. */
+      create: async () => {
+        const cur = latest.current;
+        const made = await createSyncCode({ tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external });
+        if (!made) return null;
+        setSyncCode(made.code);
+        return made.code;
+      },
+      /** Joins another device's code; this device's data is merged in. */
+      join: async (code: string) => {
+        const clean = code.trim().toUpperCase();
+        const found = await readSyncCode(clean);
+        if (found === "unknown") return "unknown" as const;
+        if (!found) return "error" as const;
+        latest.current = { ...latest.current, syncCode: clean };
+        setSyncCode(clean);
+        await syncState();
+        return "ok" as const;
+      },
+      /** Stops syncing on this device only. */
+      leave: () => setSyncCode(null),
+      /** Deletes the synced copy for every device using the code. */
+      wipe: async () => {
+        const code = latest.current.syncCode;
+        if (code) await deleteSyncCode(code);
+        setSyncCode(null);
+      },
+    }),
+    [setSyncCode, syncState],
+  );
 
   useEffect(() => {
     const first = setTimeout(loadOwnerData, 0);
@@ -317,10 +367,10 @@ function App() {
     };
   }, [loadOwnerData, syncState]);
 
-  // First sync as soon as this device is known to be the owner's.
+  // First sync as soon as this device is known to be the owner's, or has a sync code.
   useEffect(() => {
-    if (isOwner) syncState();
-  }, [isOwner, syncState]);
+    if (isOwner || syncCode) syncState();
+  }, [isOwner, syncCode, syncState]);
 
   // Local edits: send them a moment later (several quick edits go as one).
   useEffect(() => {
@@ -329,7 +379,7 @@ function App() {
       return;
     }
     localVersion.current++;
-    if (!latest.current.isOwner) return;
+    if (!latest.current.isOwner && !latest.current.syncCode) return;
     const t = setTimeout(syncState, 1500);
     return () => clearTimeout(t);
   }, [tasks, readIds, external, deletedTasks, syncState]);
@@ -481,7 +531,7 @@ function App() {
         />
       )}
       {tab === "tasks" && (
-        <TasksTab now={now} tasks={allTasks} synced={isOwner} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
+        <TasksTab now={now} tasks={allTasks} synced={isOwner || Boolean(syncCode)} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
       )}
       {tab === "calendar" && <CalendarTab now={now} tasks={allTasks} onToggleTask={taskActions.toggle} goTo={setTab} />}
     </>
@@ -620,6 +670,8 @@ function App() {
         clearInstallPrompt={() => setInstallPrompt(null)}
         boards={boards}
         setBoards={setBoards}
+        syncCode={syncCode}
+        syncActions={syncActions}
         isOwner={isOwner}
         ownerData={ownerData}
         ownerActions={ownerActions}
