@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   // The default theme's page background; page.tsx updates it when the theme changes.
-  themeColor: "#F5F7FA",
+  themeColor: "#EEF3FD",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -18,9 +18,9 @@ test.describe('Briefing', () => {
     await expect(img).toHaveClass(/is-loaded/);
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 
-    // Caption first, then the summary line.
+    // Dateline, then the painting's caption, then the summary line.
     const order = await brief.locator('header p').evaluateAll((ps) => ps.map((p) => p.className));
-    expect(order).toEqual(['brief-caption', 'brief-blurb']);
+    expect(order).toEqual(['brief-dateline', 'brief-caption', 'brief-blurb']);
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();

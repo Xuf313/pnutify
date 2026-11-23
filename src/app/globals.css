@@ -2,10 +2,9 @@
 @import 'tailwindcss';
 
 /*
- * PNUtify: "노선도" (route map). PNU station is on Busan Metro Line 1; the app
- * treats a student's week as a line where deadlines are stops. Surfaces stay
- * flat and quiet (hairline rules, rows instead of boxes) so the line, in the
- * signal colour, is the one loud thing.
+ * PNUtify reads like a daily paper: serif headlines, rules instead of boxes,
+ * and the week drawn as a line where deadlines are stops. Colour comes from
+ * the five colour modes below.
  */
 @theme inline {
   --font-sans: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
@@ -38,99 +37,106 @@
  * ink (strong rules and outlines).
  */
 
-/* ── PNU: platform white, PNU blue, Line 1 orange ── */
+/*
+ * The five colour modes keep their original colours. Each mode's own colour
+ * is its accent (primary for fills, signal for text and the week line), and
+ * its original outline colour draws the newspaper rules (ink). Hairlines are
+ * a light tint of that outline.
+ */
+
+/* ── PNU Blue (default) ── */
 :root, [data-theme="pnu"] {
-  --t-background: #F5F7FA;
-  --t-foreground: #15233B;
+  --t-background: #EEF3FD;
+  --t-foreground: #0D1F3C;
   --t-card: #FFFFFF;
-  --t-primary: #1650A8;
+  --t-primary: #143F90;
   --t-primary-fg: #FFFFFF;
-  --t-secondary: #17825F;
+  --t-secondary: #00A651;
   --t-secondary-fg: #FFFFFF;
-  --t-accent: #E7EEF9;
-  --t-accent-fg: #1650A8;
-  --t-signal: #E8650A;
+  --t-accent: #DCE7FA;
+  --t-accent-fg: #143F90;
+  --t-signal: #143F90;
   --t-signal-fg: #FFFFFF;
-  --t-muted: #EBEFF4;
-  --t-muted-fg: #5B6880;
-  --t-border: #DCE2EA;
-  --t-ink: #15233B;
+  --t-muted: #D4E0F5;
+  --t-muted-fg: #5A6E99;
+  --t-border: #CFDBF1;
+  --t-ink: #143F90;
 }
 
-/* ── Blossom: spring on the campus hill ── */
+/* ── Blossom (봄) ── */
 [data-theme="cherry"] {
-  --t-background: #FBF6F7;
-  --t-foreground: #3A2129;
+  --t-background: #FCF5F7;
+  --t-foreground: #3D212A;
   --t-card: #FFFFFF;
-  --t-primary: #B24A6E;
+  --t-primary: #D47E9B;
   --t-primary-fg: #FFFFFF;
-  --t-secondary: #4E8A5E;
-  --t-secondary-fg: #FFFFFF;
-  --t-accent: #F8E7ED;
-  --t-accent-fg: #9C3D5E;
-  --t-signal: #D9416B;
+  --t-secondary: #E8A3BA;
+  --t-secondary-fg: #3D212A;
+  --t-accent: #F7E3EA;
+  --t-accent-fg: #8E4560;
+  --t-signal: #B95C7D;
   --t-signal-fg: #FFFFFF;
-  --t-muted: #F3E9EC;
-  --t-muted-fg: #85606C;
-  --t-border: #EBDCE1;
-  --t-ink: #3A2129;
+  --t-muted: #F2E5E9;
+  --t-muted-fg: #8C6572;
+  --t-border: #ECDCE2;
+  --t-ink: #965D70;
 }
 
-/* ── Twilight: violet evening ── */
+/* ── Twilight ── */
 [data-theme="midnight"] {
-  --t-background: #F7F6FB;
-  --t-foreground: #2A2140;
+  --t-background: #F7F5FC;
+  --t-foreground: #2B213D;
   --t-card: #FFFFFF;
-  --t-primary: #6C4FC2;
+  --t-primary: #9B7ED4;
   --t-primary-fg: #FFFFFF;
-  --t-secondary: #2E8A6B;
-  --t-secondary-fg: #FFFFFF;
-  --t-accent: #EEE9FA;
-  --t-accent-fg: #5A3FAE;
-  --t-signal: #C2459A;
+  --t-secondary: #BCA3E8;
+  --t-secondary-fg: #2B213D;
+  --t-accent: #ECE5F8;
+  --t-accent-fg: #5F45A3;
+  --t-signal: #7B5DBE;
   --t-signal-fg: #FFFFFF;
-  --t-muted: #EEEBF5;
-  --t-muted-fg: #6E6488;
-  --t-border: #E2DDEE;
-  --t-ink: #2A2140;
+  --t-muted: #EAE5F2;
+  --t-muted-fg: #73658C;
+  --t-border: #E3DCEF;
+  --t-ink: #735D96;
 }
 
-/* ── Autumn: ginkgo and maple ── */
+/* ── Autumn ── */
 [data-theme="autumn"] {
-  --t-background: #FAF7F2;
-  --t-foreground: #33241B;
+  --t-background: #FCF5F2;
+  --t-foreground: #3D261D;
   --t-card: #FFFFFF;
-  --t-primary: #A4471F;
+  --t-primary: #D48B68;
   --t-primary-fg: #FFFFFF;
-  --t-secondary: #5E7D2E;
-  --t-secondary-fg: #FFFFFF;
-  --t-accent: #F7EADF;
-  --t-accent-fg: #8E3D19;
-  --t-signal: #D99A0B;
-  --t-signal-fg: #2A1D10;
-  --t-muted: #F1EBE3;
-  --t-muted-fg: #7D675A;
-  --t-border: #E8DFD4;
-  --t-ink: #33241B;
+  --t-secondary: #E8B59E;
+  --t-secondary-fg: #3D261D;
+  --t-accent: #F7E7DF;
+  --t-accent-fg: #8F4E30;
+  --t-signal: #B8694A;
+  --t-signal-fg: #FFFFFF;
+  --t-muted: #F2E7E1;
+  --t-muted-fg: #8C6E61;
+  --t-border: #EDDFD8;
+  --t-ink: #966551;
 }
 
-/* ── Night: the last train ── */
+/* ── Night (dark) ── */
 [data-theme="night"] {
   --t-background: #121826;
-  --t-foreground: #E6EAF2;
-  --t-card: #1A2233;
-  --t-primary: #7FA6FF;
+  --t-foreground: #E8ECF5;
+  --t-card: #1B2333;
+  --t-primary: #6F9BFF;
   --t-primary-fg: #0D1424;
-  --t-secondary: #45C08A;
+  --t-secondary: #3DCB86;
   --t-secondary-fg: #0D1424;
   --t-accent: #22304A;
   --t-accent-fg: #A9C2FF;
-  --t-signal: #FF8A3D;
-  --t-signal-fg: #1A1006;
-  --t-muted: #222C40;
-  --t-muted-fg: #97A3BC;
-  --t-border: #2A3550;
-  --t-ink: #E6EAF2;
+  --t-signal: #8FB0FF;
+  --t-signal-fg: #0D1424;
+  --t-muted: #263044;
+  --t-muted-fg: #9AA7C2;
+  --t-border: #2C3852;
+  --t-ink: #8FA4CC;
   color-scheme: dark;
 }
 
@@ -392,22 +398,10 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   STYLE: Editorial. The Briefing as the front page of a daily paper:
-   a nameplate, rules instead of boxes, serif headlines everywhere,
-   PNU blue as the only colour and a spot red for deadlines.
+   Editorial: the Briefing as the front page of a daily paper: a
+   nameplate, rules instead of boxes, serif headlines everywhere. Colour
+   comes from the chosen mode; rules are drawn in its outline colour.
    ══════════════════════════════════════════════════════════════ */
-:root:not([data-theme]), [data-theme="pnu"] {
-  --t-background: #FFFFFF;
-  --t-card: #FFFFFF;
-  --t-foreground: #16191F;
-  --t-ink: #16191F;
-  --t-primary: #1650A8;
-  --t-signal: #C8102E;
-  --t-muted: #F1F2F4;
-  --t-muted-fg: #5D636E;
-  --t-border: #D9DCE1;
-}
-[data-theme="night"] { --t-signal: #FF6B6B; --t-ink: #E6EAF2; }
 
 /* Nameplate */
 .brief-masthead { text-align: center; }
