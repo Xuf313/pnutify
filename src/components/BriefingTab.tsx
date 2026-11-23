@@ -161,7 +161,7 @@ export function BriefingTab(p: Props) {
   });
   const maxCount = Math.max(1, ...week.map((w) => w.count));
 
-  const alertsOff = p.alertsReady && !p.alerts.cse && !p.alerts.international && !p.alerts.tasks;
+  const alertsOff = p.alertsReady && p.alerts.boards.length === 0 && !p.alerts.tasks;
   const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
   const painting = paintingOfTheDay(now);

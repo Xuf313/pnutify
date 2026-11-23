@@ -1,4 +1,7 @@
-export type NoticeSource = 'cse' | 'international';
+import { BOARD_DEFS, CORE_BOARD_IDS } from '../boardList';
+
+/** A board id: 'cse', 'international', or a department's (e.g. 'math'). */
+export type NoticeSource = string;
 
 export type Notice = {
   id: string;
@@ -39,8 +42,8 @@ export const THEMES: { id: Theme; label: string; swatch: string }[] = [
   { id: 'night', label: 'Night', swatch: '#1B2333' },
 ];
 
-/** One switch per board, plus deadline reminders and (owner only) course posts. */
-export type AlertCategories = Record<NoticeSource, boolean> & { tasks: boolean; weekly: boolean; courses: boolean };
+/** Alerts for the listed boards, deadline reminders, the weekly preview and (owner only) course posts. */
+export type AlertCategories = { boards: NoticeSource[]; tasks: boolean; weekly: boolean; courses: boolean };
 
 // ---------- owner mode (PLATO and NESPA, for the site owner only) ----------
 
@@ -64,11 +67,21 @@ export type OwnerData = { checkedAt: number; plato: OwnerSource<PlatoData>; nesp
 /** One item in the Briefing's "From your courses" list. */
 export type CoursePost = { id: string; title: string; source: 'PLATO' | 'NESPA'; course: string; postedAt: number | null; url: string; excerpt?: string };
 
-/** Every notice board PNUtify reads. Add a board here and in src/lib/scrapeNotices.ts. */
-export const BOARDS: { id: NoticeSource; label: string; short: string; name: string }[] = [
-  { id: 'cse', label: 'CSE', short: 'CSE', name: '정보컴퓨터공학부' },
-  { id: 'international', label: 'International', short: 'Intl.', name: '국제처' },
-];
+export type BoardInfo = { id: NoticeSource; label: string; short: string; name: string; college: string; core: boolean; aliases: string[] };
+/** Every notice board PNUtify can read (the list lives in src/lib/boardList.ts and src/lib/departments.ts). */
+export const BOARDS: BoardInfo[] = BOARD_DEFS.map((d) => ({
+  id: d.id,
+  label: d.id === 'international' ? 'International' : d.label,
+  short: d.label,
+  name: d.name,
+  college: d.college,
+  core: d.core === true,
+  aliases: d.aliases ?? [],
+}));
 export const BOARD_IDS = BOARDS.map((b) => b.id);
+/** What a new device shows. */
+export const DEFAULT_BOARDS: NoticeSource[] = CORE_BOARD_IDS;
+/** Most boards one device can show (the server reads at most this many per request). */
+export const MAX_SHOWN_BOARDS = 12;
 export const SOURCE_LABEL = Object.fromEntries(BOARDS.map((b) => [b.id, b.label])) as Record<NoticeSource, string>;
 export const boardInfo = (id: string) => BOARDS.find((b) => b.id === id);

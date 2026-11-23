@@ -3,6 +3,7 @@ import { FakeRedis } from './fakeRedis';
 import { KEYS, setRedisForTesting } from '../redis';
 import { OWNER_KEYS, ownerCookie } from '../owner';
 import { alertStatus } from '../ownerAlerts';
+import { NOTICE_KEYS } from '../notices';
 import { GET } from '../../app/api/owner/alerts/route';
 
 const NOW = Date.parse('2026-11-23T12:00:00+09:00');
@@ -31,7 +32,7 @@ describe('alerts check', () => {
   it('reports a healthy owner device and which reminders were sent', async () => {
     const due = NOW + 20 * H;
     ownerData([{ id: 'plato_1', title: 'HW1', dueAt: due }]);
-    redis.kv.set(KEYS.checkedAt, NOW - 60_000);
+    redis.hashes.set(NOTICE_KEYS.meta, { cse: { checkedAt: NOW - 60_000, scrapedAt: NOW - 60_000, failingSince: null, ids: [] } });
     redis.kv.set(KEYS.deadlinesCheckedAt, NOW - 120_000);
     redis.kv.set(KEYS.subscription('dev-12345'), { endpoint: 'https://push.example/1', keys: { p256dh: 'p', auth: 'a' } });
     redis.kv.set(KEYS.categories('dev-12345'), { tasks: true });
@@ -43,6 +44,7 @@ describe('alerts check', () => {
     const s = await alertStatus('dev-12345', NOW);
     expect(s?.device).toMatchObject({ subscribed: true, inSendList: true, ownerDevice: true, categories: { tasks: true } });
     expect(s?.device.lastPush).toMatchObject({ ok: true, title: 'Due in 23 hours' });
+    expect(s?.lastCheckAt).toBe(NOW - 60_000);
     expect(s?.lastDeadlineCheckAt).toBe(NOW - 120_000);
     expect(s?.upcoming).toEqual([{ id: 'plato_1', title: 'HW1', source: 'PLATO', dueAt: due, at24: due - 24 * H, at1: due - H, sent24: true, sent1: false }]);
   });

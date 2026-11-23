@@ -1,21 +1,37 @@
 import webpush, { type PushSubscription } from 'web-push';
 import { getRedis, KEYS, withLock } from './redis';
-import { BOARD_DOWN_ALERT_MS, refreshNotices, type Notice } from './notices';
+import {
+  BOARD_DOWN_ALERT_MS,
+  checkBoards,
+  planChecks,
+  readDemand,
+  readMeta,
+  recordDemand,
+  type BoardSnapshot,
+  type Notice,
+} from './notices';
 import { OWNER_KEYS, ownerEnabled, type LastPush } from './owner';
-import { BOARDS, type NoticeSource } from './scrapeNotices';
+import { boardBySource } from './scrapeNotices';
+import { isKnownBoard } from './boardList';
 import { weeklyMessage, weeklyWindow } from './weekly';
 import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
-/** One switch per board, plus deadlines; `courses` (PLATO and NESPA posts) only applies to owner devices. */
-export type Categories = Record<NoticeSource, boolean> & { tasks: boolean; weekly: boolean; courses: boolean };
+/**
+ * What a device gets alerts for: the boards listed in `boards`, deadline
+ * reminders, the weekly preview, and (owner devices only) PLATO/NESPA posts.
+ */
+export type Categories = { boards: string[]; tasks: boolean; weekly: boolean; courses: boolean };
 /** Nothing is on until the student turns it on. */
-export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, tasks: false, weekly: false, courses: false };
+export const DEFAULT_CATEGORIES: Categories = { boards: [], tasks: false, weekly: false, courses: false };
+const MAX_ALERT_BOARDS = 12;
 
 export function normalizeCategories(value: unknown): Categories {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const boards = Array.isArray(v.boards) ? v.boards.filter(isKnownBoard) : [];
+  // Earlier versions stored one switch per board: { cse: true, international: false, ... }.
+  for (const legacy of ['cse', 'international']) if (v[legacy] === true && !Array.isArray(v.boards)) boards.push(legacy);
   return {
-    cse: v.cse === true,
-    international: v.international === true,
+    boards: [...new Set(boards)].slice(0, MAX_ALERT_BOARDS),
     tasks: v.tasks === true,
     weekly: v.weekly === true,
     courses: v.courses === true,
@@ -64,8 +80,10 @@ export function hoursText(ms: number): string {
 export type RunReport = {
   ok: boolean;
   skipped?: string;
-  /** "quick": only page 1 was read and nothing was new. "full": every page was read. */
+  /** "quick": only page 1 was read and nothing was new. "full": at least one board was read fully. */
   checked?: 'quick' | 'full';
+  /** Boards looked at this run, and how many of them were read fully. */
+  boards?: { checked: number; full: number };
   noticeCount: number;
   freshNotices: number;
   deadlinesChecked: boolean;
@@ -103,6 +121,48 @@ const DEVICE_BATCH = 50;
 
 type Outgoing = { payload: PushPayload; urgency: 'high' | 'normal' };
 
+const pushedKey = (board: string) => `push:pushed:${board}`;
+
+/**
+ * Notices on these boards that nobody has been alerted about, if they're
+ * still fresh. Each board's list is marked pushed up front: a notice is
+ * offered once, even if some device fails.
+ */
+async function freshNotices(redis: NonNullable<ReturnType<typeof getRedis>>, boards: BoardSnapshot[], now: number): Promise<Notice[]> {
+  const lists = await redis.mget<(string[] | null)[]>(...boards.map((b) => pushedKey(b.board)));
+  let legacy: string[] | null | undefined;
+  const fresh: Notice[] = [];
+  for (const [i, snap] of boards.entries()) {
+    let pushed = lists[i];
+    if (!Array.isArray(pushed)) {
+      // First read of a board, or the first run of this version: carry over the
+      // old shared list (core boards), or count everything already there as
+      // pushed, so nobody gets a flood of old notices.
+      if (boardBySource(snap.board)?.core) {
+        if (legacy === undefined) {
+          const [a, b] = await redis.mget<(string[] | null)[]>(KEYS.pushedNotices, KEYS.legacySeen);
+          legacy = Array.isArray(a) ? a : Array.isArray(b) && b.length > 0 ? b : null;
+        }
+        pushed = legacy ?? snap.notices.map((n) => n.id);
+      } else pushed = snap.notices.map((n) => n.id);
+    }
+    const pushedSet = new Set(pushed);
+    fresh.push(
+      ...snap.notices.filter(
+        (n) =>
+          !pushedSet.has(n.id) &&
+          now - n.firstSeenAt <= NOTICE_PUSH_MAX_AGE_MS &&
+          (n.postedAt === null || now - n.postedAt <= NOTICE_POST_MAX_AGE_MS),
+      ),
+    );
+    if (snap.failingSince != null) continue; // kept from before: nothing to update
+    const current = snap.notices.map((n) => n.id);
+    const currentSet = new Set(current);
+    await redis.set(pushedKey(snap.board), [...new Set([...pushed.filter((id) => currentSet.has(id)), ...current])], { ex: 60 * 86_400 });
+  }
+  return fresh;
+}
+
 export async function runNotificationCycle(now = Date.now()): Promise<RunReport> {
   const redis = getRedis();
   const empty: RunReport = {
@@ -119,33 +179,18 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
   if (!redis) return { ...empty, skipped: 'redis-not-configured' };
 
   const result = await withLock(redis, KEYS.runLock, 55, async (): Promise<RunReport> => {
-    const { snapshot, changed } = await refreshNotices(now, { quick: true, locked: true });
-    const boardsDown = Object.entries(snapshot.failingSince)
-      .filter(([, since]) => typeof since === 'number' && now - since >= BOARD_DOWN_ALERT_MS)
-      .map(([source]) => source);
+    // Only boards that someone uses: core boards always, department boards on demand.
+    const [metas, demand] = await Promise.all([readMeta(redis), readDemand(redis, now)]);
+    const plan = planChecks(now, metas, demand);
+    const { refreshed, checked, metas: after } = await checkBoards(redis, now, plan, metas);
+    const changed = refreshed.length > 0;
+    const coreDown = Object.entries(after)
+      .filter(([id, m]) => boardBySource(id)?.core && m.failingSince != null && now - m.failingSince >= BOARD_DOWN_ALERT_MS)
+      .map(([id]) => id);
+    const staleSources = checked.filter((id) => after[id]?.failingSince != null);
 
-    // ---- Which notices haven't been pushed yet? Only worth asking after a full read. ----
-    let fresh: Notice[] = [];
-    if (changed) {
-      let pushed = await redis.get<string[]>(KEYS.pushedNotices);
-      if (!Array.isArray(pushed)) {
-        // First run of this version: carry over the old seen-list so nobody gets
-        // a flood of notices they were already told about.
-        const legacy = await redis.get<string[]>(KEYS.legacySeen);
-        pushed = Array.isArray(legacy) && legacy.length > 0 ? legacy : snapshot.notices.map((n) => n.id);
-      }
-      const pushedSet = new Set(pushed);
-      fresh = snapshot.notices.filter(
-        (n) =>
-          !pushedSet.has(n.id) &&
-          now - n.firstSeenAt <= NOTICE_PUSH_MAX_AGE_MS &&
-          (n.postedAt === null || now - n.postedAt <= NOTICE_POST_MAX_AGE_MS),
-      );
-      // Mark them pushed up front: a notice is offered once, even if some device fails.
-      const currentIds = new Set(snapshot.notices.map((n) => n.id));
-      const nextPushed = [...new Set([...pushed.filter((id) => currentIds.has(id)), ...snapshot.notices.map((n) => n.id)])];
-      await redis.set(KEYS.pushedNotices, nextPushed);
-    }
+    // ---- Which notices haven't been pushed yet? Only boards read fully this run can have any. ----
+    const fresh: Notice[] = changed ? await freshNotices(redis, refreshed, now) : [];
 
     const lastDeadlineCheck = Number(await redis.get<number>(KEYS.deadlinesCheckedAt)) || 0;
     const checkDeadlines = now - lastDeadlineCheck >= DEADLINE_CHECK_EVERY_MS;
@@ -173,14 +218,15 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
     const report: RunReport = {
       ok: true,
       checked: changed ? 'full' : 'quick',
-      noticeCount: snapshot.notices.length,
+      boards: { checked: checked.length, full: refreshed.length },
+      noticeCount: Object.values(after).reduce((sum, m) => sum + (m.ids?.length ?? 0), 0),
       freshNotices: fresh.length,
       deadlinesChecked: checkDeadlines,
       devices: 0,
       sent: 0,
       pruned: 0,
-      staleSources: snapshot.staleSources,
-      boardsDown,
+      staleSources,
+      boardsDown: coreDown,
       ...(ownerEnabled() ? { owner: { synced: ownerSynced, fresh: ownerFresh.length } } : {}),
     };
     // Most runs end here: nothing new and reminders were checked recently.
@@ -219,11 +265,15 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         report.pruned++;
         return;
       }
-      if (!hasVapid) return;
       const categories = normalizeCategories(rawCategories);
+      if (!hasVapid) {
+        if (checkDeadlines) alertBoards.push(...categories.boards);
+        return;
+      }
       const outgoing: Outgoing[] = [];
 
-      const mine = fresh.filter((n) => categories[n.source]);
+      if (checkDeadlines) alertBoards.push(...categories.boards);
+      const mine = fresh.filter((n) => categories.boards.includes(n.source));
       if (mine.length > MAX_INDIVIDUAL_NOTICE_PUSHES) {
         outgoing.push({
           payload: {
@@ -238,7 +288,7 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         for (const n of mine) {
           outgoing.push({
             payload: {
-              title: `New ${BOARDS.find((b) => b.source === n.source)?.label ?? 'PNU'} notice`,
+              title: `New ${boardBySource(n.source)?.label ?? 'PNU'} notice`,
               body: n.title,
               url: noticeTarget(n),
               tag: `notice-${n.id}`,
@@ -343,7 +393,10 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
       }
     };
 
-    // One read per batch of devices instead of four per device.
+    // Boards with alerts on stay on the checking schedule (refreshed with each deadline check).
+    const alertBoards: string[] = [];
+
+    // One read per batch of devices instead of five per device.
     for (let i = 0; i < deviceIds.length; i += DEVICE_BATCH) {
       const ids = deviceIds.slice(i, i + DEVICE_BATCH);
       const keys = ids.flatMap((id) => [KEYS.subscription(id), KEYS.categories(id), KEYS.tasks(id), KEYS.notifiedDeadlines(id), KEYS.weeklySent(id)]);
@@ -357,6 +410,7 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
       );
     }
 
+    if (alertBoards.length > 0) await recordDemand(alertBoards, 'alert', now);
     return report;
   });
 

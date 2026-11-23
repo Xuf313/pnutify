@@ -5,7 +5,7 @@ const D = 24 * H;
 
 /** Notices as /api/notices returns them, dated relative to now. */
 export function noticeSnapshot(now = Date.now()) {
-  const n = (id: string, source: 'cse' | 'international' | 'pnu', title: string, ageH: number, pinned = false) => ({
+  const n = (id: string, source: string, title: string, ageH: number, pinned = false) => ({
     id,
     title,
     date: new Date(now - ageH * H + 9 * H).toISOString().slice(0, 10).replace(/-/g, '.'),
@@ -26,6 +26,7 @@ export function noticeSnapshot(now = Date.now()) {
       n('cse_102', 'cse', '건물 출입 통제 알림', 20),
       n('cse_103', 'cse', 'Old pinned notice about graduation requirements', 24 * 40, true),
       n('intl_202', 'international', 'Visa document review hours', 24 * 10),
+      n('math_301', 'math', '2027학년도 수학과 졸업시험 안내', 3),
     ],
   };
 }
@@ -59,7 +60,12 @@ export function ownerData(now = Date.now()) {
 
 /** Answers the app's own API calls in the browser. Owner endpoints say "not the owner" unless `owner` is set. */
 export async function mockApis(page: Page, opts: { owner?: boolean } = {}) {
-  await page.route('**/api/notices**', (r) => r.fulfill({ json: noticeSnapshot() }));
+  // Like the real endpoint: only the boards asked for (the core ones when none are given).
+  await page.route('**/api/notices**', (r) => {
+    const boards = new URL(r.request().url()).searchParams.get('boards')?.split(',') ?? ['cse', 'international'];
+    const snap = noticeSnapshot();
+    return r.fulfill({ json: { ...snap, notices: snap.notices.filter((x) => boards.includes(x.source)), boards, pending: [] } });
+  });
   await page.route('**/api/notices/notice-detail**', (r) =>
     r.fulfill({
       json: {
@@ -73,7 +79,7 @@ export async function mockApis(page: Page, opts: { owner?: boolean } = {}) {
     }),
   );
   await page.route('**/api/tasks/sync', (r) => r.fulfill({ json: { ok: true } }));
-  await page.route('**/api/push/**', (r) => r.fulfill({ json: { categories: { cse: false, international: false, tasks: false, courses: false }, subscribed: false } }));
+  await page.route('**/api/push/**', (r) => r.fulfill({ json: { categories: { boards: [], tasks: false, weekly: false, courses: false }, subscribed: false } }));
   if (opts.owner) {
     await page.route('**/api/owner/data', (r) => r.fulfill({ json: ownerData() }));
     await page.route('**/api/owner/state', (r) => r.fulfill({ json: { state: r.request().postDataJSON()?.state ?? {} } }));

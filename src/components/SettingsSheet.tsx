@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { Bell, BookOpen, CircleCheck, Copy, Link2, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
-import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
+import { anyAlertOn, isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
 import { formatDue, relative } from "@/lib/client/time";
 import { fetchAlertStatus, type AlertStatus } from "@/lib/client/owner";
-import { BOARDS, THEMES, type AlertCategories, type NoticeSource, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
-import { BoardIcon } from "./BoardIcon";
+import { BOARDS, THEMES, type AlertCategories, type BoardInfo, type NoticeSource, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
+import { BoardPicker } from "./BoardPicker";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -40,26 +40,34 @@ type Props = {
   };
 };
 
-type AlertRow = { key: keyof AlertCategories; title: string; body: string };
-const TASK_ROW: AlertRow = { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" };
-const WEEKLY_ROW: AlertRow = { key: "weekly", title: "Weekly preview", body: "Sunday at 8 pm: the coming week's deadlines, day by day" };
-const boardRow = (b: (typeof BOARDS)[number]): AlertRow => ({ key: b.id, title: `${b.label} notices`, body: `New posts on the ${b.name} board` });
-
-const COURSE_ROW = { key: "courses" as const, title: "PLATO & NESPA posts", body: "New course announcements and NESPA notices (owner only)" };
+type Toggle = "tasks" | "weekly" | "courses";
+/** A switch: one of the plain toggles, or a board. */
+type AlertRow = { key: string; title: string; body: string; checked: (a: AlertCategories) => boolean; patch: (a: AlertCategories, on: boolean) => Partial<AlertCategories> };
+const toggleRow = (key: Toggle, title: string, body: string): AlertRow => ({ key, title, body, checked: (a) => a[key], patch: (_, on) => ({ [key]: on }) });
+const TASK_ROW = toggleRow("tasks", "Deadline reminders", "24 hours and 1 hour before your tasks are due");
+const WEEKLY_ROW = toggleRow("weekly", "Weekly preview", "Sunday at 8 pm: the coming week's deadlines, day by day");
+const COURSE_ROW = toggleRow("courses", "PLATO & NESPA posts", "New course announcements and NESPA notices (owner only)");
+const boardRow = (b: BoardInfo): AlertRow => ({
+  key: `board:${b.id}`,
+  title: b.core ? `${b.label} notices` : b.name,
+  body: b.core ? `New posts on the ${b.name} board` : `New posts on the ${b.college} · ${b.name} board`,
+  checked: (a) => a.boards.includes(b.id),
+  patch: (a, on) => ({ boards: on ? [...a.boards.filter((x) => x !== b.id), b.id] : a.boards.filter((x) => x !== b.id) }),
+});
 
 export function SettingsSheet(p: Props) {
-  const [busy, setBusy] = useState<keyof AlertCategories | "test" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const support = pushSupport();
-  const anyOn = Object.values(p.alerts).some(Boolean);
+  const anyOn = anyAlertOn(p.alerts);
   // One switch per board this device shows, then deadlines (and course posts for the owner).
   const rows: AlertRow[] = [...BOARDS.filter((b) => p.boards.includes(b.id)).map(boardRow), TASK_ROW, WEEKLY_ROW, ...(p.isOwner ? [COURSE_ROW] : [])];
 
-  const toggle = async (key: keyof AlertCategories, value: boolean) => {
-    setBusy(key);
+  const toggle = async (row: AlertRow, value: boolean) => {
+    setBusy(row.key);
     setMessage(null);
     try {
-      await p.changeAlerts({ [key]: value });
+      await p.changeAlerts(row.patch(p.alerts, value));
     } catch (e) {
       const m = e instanceof Error ? e.message : "";
       setMessage(
@@ -109,9 +117,9 @@ export function SettingsSheet(p: Props) {
                   </div>
                   <Switch
                     label={row.title}
-                    checked={p.alerts[row.key]}
+                    checked={row.checked(p.alerts)}
                     disabled={!p.alertsReady || busy !== null}
-                    onChange={(v) => toggle(row.key, v)}
+                    onChange={(v) => toggle(row, v)}
                   />
                 </li>
               ))}
@@ -135,29 +143,7 @@ export function SettingsSheet(p: Props) {
             <Newspaper size={18} className="text-primary" /> Boards
           </h3>
           <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
-          <ul className="flex flex-col divide-y-2 divide-dashed divide-border/20">
-            {BOARDS.map((b) => {
-              const on = p.boards.includes(b.id);
-              return (
-                <li key={b.id} className="flex items-center justify-between gap-4 py-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <BoardIcon source={b.id} size={18} className="text-primary shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-foreground">{b.label}</p>
-                      <p className="text-sm text-muted-foreground">{b.name}</p>
-                    </div>
-                  </div>
-                  <Switch
-                    label={`Show ${b.label} notices`}
-                    checked={on}
-                    // Keep at least one board.
-                    disabled={on && p.boards.length === 1}
-                    onChange={(v) => p.setBoards(v ? BOARDS.map((x) => x.id).filter((id) => id === b.id || p.boards.includes(id)) : p.boards.filter((id) => id !== b.id))}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+          <BoardPicker boards={p.boards} setBoards={p.setBoards} />
         </section>
 
         {/* ---------- sync across devices (owner devices already sync) ---------- */}

@@ -9,6 +9,7 @@ export class FakeRedis {
   kv = new Map<string, unknown>();
   hashes = new Map<string, Record<string, unknown>>();
   sets = new Map<string, Set<string>>();
+  zsets = new Map<string, Map<string, number>>();
   commands = 0;
 
   private copy<T>(v: T): T {
@@ -74,6 +75,23 @@ export class FakeRedis {
     this.commands++;
     members.forEach((m) => this.sets.get(key)?.delete(m));
     return members.length;
+  }
+  async zadd(key: string, ...entries: { score: number; member: string }[]): Promise<number> {
+    this.commands++;
+    const z = this.zsets.get(key) ?? new Map<string, number>();
+    for (const e of entries) z.set(e.member, e.score);
+    this.zsets.set(key, z);
+    return entries.length;
+  }
+  /** Only the by-score form with scores is used. */
+  async zrange(key: string, min: number | string, max: number | string): Promise<(string | number)[]> {
+    this.commands++;
+    const lo = min === '-inf' ? -Infinity : Number(min);
+    const hi = max === '+inf' ? Infinity : Number(max);
+    return [...(this.zsets.get(key) ?? new Map<string, number>())]
+      .filter(([, s]) => s >= lo && s <= hi)
+      .sort((a, b) => a[1] - b[1])
+      .flatMap(([m, s]) => [m, s]);
   }
   /** Only the lock-release script is used. */
   async eval(_script: string, keys: string[], args: string[]): Promise<number> {

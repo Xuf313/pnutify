@@ -127,7 +127,7 @@ test.describe('Boards', () => {
     await expect(main.getByText('Visa document review hours')).toBeVisible();
 
     await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
-    await page.getByRole('dialog').getByRole('switch', { name: 'Show International notices' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove International' }).click();
     await page.keyboard.press('Escape');
 
     await expect(main.getByRole('tab', { name: /Intl/ })).toHaveCount(0);
@@ -135,5 +135,30 @@ test.describe('Boards', () => {
     // Remembered on this device.
     await page.reload();
     await expect(visible(page, 'main').getByRole('tab', { name: /Intl/ })).toHaveCount(0);
+  });
+
+  test('a department board can be found by search and added', async ({ page }) => {
+    await page.goto('/?tab=notices');
+    const main = visible(page, 'main');
+    await expect(main.getByText('2027학년도 수학과 졸업시험 안내')).toHaveCount(0);
+
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Search departments').fill('수학');
+    await dialog.getByRole('button', { name: 'Add 수학과' }).click();
+    await expect(dialog.getByRole('button', { name: 'Remove 수학과' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await expect(main.getByRole('tab', { name: /수학과/ })).toBeVisible();
+    await expect(main.getByText('2027학년도 수학과 졸업시험 안내')).toBeVisible();
+  });
+
+  test('departments are listed by college', async ({ page }) => {
+    await page.goto('/');
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: /^공과대학/ }).click();
+    await expect(dialog.getByRole('button', { name: 'Add 항공우주공학과' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add 수학과' })).toHaveCount(0);
   });
 });

@@ -3,7 +3,7 @@ import webpush from 'web-push';
 import { FakeRedis } from './fakeRedis';
 import { setRedisForTesting, KEYS } from '../redis';
 import { runNotificationCycle } from '../push';
-import { refreshNotices, BOARD_DOWN_ALERT_MS, FULL_REFRESH_MS } from '../notices';
+import { refreshNotices, BOARD_DOWN_ALERT_MS, CORE_FULL_MS, DEPT_FULL_MS, NOTICE_KEYS, VIEWED_QUICK_MS, recordDemand } from '../notices';
 import * as scrape from '../scrapeNotices';
 import { OWNER_KEYS } from '../owner';
 import type { NoticeSource, ScrapedNotice } from '../scrapeNotices';
@@ -26,20 +26,36 @@ vi.mock('../ownerSync', async (importOriginal) => {
   };
 });
 
+// Two department boards besides the core ones.
+vi.mock('../departments', () => ({
+  DEPARTMENT_BOARDS: [
+    { id: 'me', label: '기계', name: '기계공학부', college: '공과대학', url: 'https://me.pusan.ac.kr/me/14186/subview.do' },
+    { id: 'physics', label: '물리', name: '물리학과', college: '자연과학대학', url: 'https://physics.pusan.ac.kr/physics/1/subview.do' },
+  ],
+}));
+
 // The boards are simulated: each test sets what they return. null = the site is down.
-const boards: Record<NoticeSource, ScrapedNotice[] | null> = { cse: [], international: [] };
+const boards: Record<NoticeSource, ScrapedNotice[] | null> = { cse: [], international: [], me: [], physics: [] };
 vi.mock('../scrapeNotices', async (importOriginal) => {
   const real = await importOriginal<typeof import('../scrapeNotices')>();
-  const result = (source: NoticeSource) => ({ source, ok: boards[source] !== null, notices: boards[source] ?? [] });
   return {
     ...real,
-    scrapeAllBoards: vi.fn(async () => [result('cse'), result('international')]),
-    checkFirstPages: vi.fn(async () =>
-      (['cse', 'international'] as const).map((source) => ({ source, ok: boards[source] !== null, ids: (boards[source] ?? []).map((n) => n.id) })),
-    ),
+    scrapeBoard: vi.fn(async (b: { source: string }) => ({ source: b.source, ok: boards[b.source] !== null, notices: boards[b.source] ?? [] })),
+    scrapeFirstPage: vi.fn(async (b: { source: string }) => ({
+      source: b.source,
+      ok: boards[b.source] !== null,
+      ids: (boards[b.source] ?? []).map((n) => n.id),
+    })),
     fetchFullTitle: vi.fn(async (n: { title: string }) => ({ ok: true, title: `${n.title} (full)` })),
   };
 });
+/** How many full and page-1 reads of a board have happened. */
+const fullReads = (source?: string) => vi.mocked(scrape.scrapeBoard).mock.calls.filter(([b]) => !source || b.source === source).length;
+const quickReads = (source: string) => vi.mocked(scrape.scrapeFirstPage).mock.calls.filter(([b]) => b.source === source).length;
+const clearReads = () => {
+  vi.mocked(scrape.scrapeBoard).mockClear();
+  vi.mocked(scrape.scrapeFirstPage).mockClear();
+};
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -48,11 +64,13 @@ const send = vi.mocked(webpush.sendNotification);
 let redis: FakeRedis;
 
 function notice(n: number, source: NoticeSource = 'cse', postedAt = T0, title = `Notice ${n}`): ScrapedNotice {
-  const prefix = source === 'cse' ? 'cse' : 'intl';
+  const prefix = source === 'international' ? 'intl' : source;
   return { id: `${prefix}_${n}`, title, date: '2026.11.19', postedAt, source, url: `https://example.pusan.ac.kr/${n}`, pinned: false };
 }
 
-function addDevice(id: string, categories: Partial<Record<'cse' | 'international' | 'tasks' | 'weekly' | 'courses', boolean>>, tasks: unknown[] = []) {
+// Most tests store categories in the shape from before board lists ({ cse: true }), which must keep working.
+type Cats = Partial<Record<'cse' | 'international' | 'tasks' | 'weekly' | 'courses', boolean>> & { boards?: string[] };
+function addDevice(id: string, categories: Cats, tasks: unknown[] = []) {
   redis.kv.set(KEYS.subscription(id), { endpoint: `https://push.example/${id}`, keys: { p256dh: 'p', auth: 'a' } });
   redis.kv.set(KEYS.categories(id), { cse: false, international: false, tasks: false, courses: false, ...categories });
   redis.kv.set(KEYS.tasks(id), tasks);
@@ -67,9 +85,11 @@ beforeEach(() => {
   setRedisForTesting(redis.asRedis());
   boards.cse = [notice(1), notice(2)];
   boards.international = [notice(10, 'international')];
+  boards.me = [notice(100, 'me')];
+  boards.physics = [notice(200, 'physics')];
   send.mockReset();
   send.mockResolvedValue({ statusCode: 201, body: '', headers: {} });
-  vi.mocked(scrape.scrapeAllBoards).mockClear();
+  clearReads();
   vi.mocked(scrape.fetchFullTitle).mockClear();
   process.env.VAPID_PUBLIC_KEY = 'pub';
   process.env.VAPID_PRIVATE_KEY = 'priv';
@@ -126,20 +146,20 @@ describe('checking every minute stays cheap', () => {
   it('reads only page 1 when nothing is new, using a handful of Redis commands', async () => {
     addDevice('a', { cse: true, tasks: true });
     await runNotificationCycle(T0);
-    expect(scrape.scrapeAllBoards).toHaveBeenCalledTimes(1);
+    expect(fullReads()).toBe(2);
 
     redis.commands = 0;
     const report = await runNotificationCycle(T0 + MIN);
     expect(report.checked).toBe('quick');
-    expect(scrape.scrapeAllBoards).toHaveBeenCalledTimes(1);
-    // lock, snapshot read, checked-at write, deadline-check read, lock release
-    expect(redis.commands).toBeLessThanOrEqual(5);
+    expect(fullReads()).toBe(2);
+    // lock, board info, board demand, checked-at write, deadline-check read, lock release
+    expect(redis.commands).toBeLessThanOrEqual(6);
   });
 
   it('still re-reads every page every 30 minutes', async () => {
     await runNotificationCycle(T0);
-    await runNotificationCycle(T0 + FULL_REFRESH_MS + MIN);
-    expect(scrape.scrapeAllBoards).toHaveBeenCalledTimes(2);
+    await runNotificationCycle(T0 + CORE_FULL_MS + MIN);
+    expect(fullReads('cse')).toBe(2);
   });
 
   it('reads all devices in one batch instead of four commands each', async () => {
@@ -155,10 +175,70 @@ describe('checking every minute stays cheap', () => {
   it('serves the stored snapshot to page views and skips scraping when a run is already going', async () => {
     await runNotificationCycle(T0);
     redis.kv.set(KEYS.runLock, 'someone-else');
-    const { snapshot, changed } = await refreshNotices(T0 + 20 * MIN, { quick: true });
+    const { snapshot, changed } = await refreshNotices(T0 + 20 * MIN);
     expect(changed).toBe(false);
     expect(snapshot.notices).toHaveLength(3);
-    expect(scrape.scrapeAllBoards).toHaveBeenCalledTimes(1);
+    expect(fullReads()).toBe(2);
+  });
+});
+
+describe('upgrading from one shared snapshot', () => {
+  it('keeps the old pushed list and first-seen times, so nothing is sent twice', async () => {
+    addDevice('a', { cse: true });
+    redis.kv.set(KEYS.pushedNotices, ['cse_1', 'cse_2', 'intl_10']);
+    redis.hashes.set(KEYS.firstSeen, { cse_1: T0 - HOUR, cse_2: T0 - HOUR, intl_10: T0 - HOUR });
+    boards.cse = [notice(3, 'cse', T0), ...boards.cse!];
+    await runNotificationCycle(T0);
+    expect(sentTo('a').map((p) => p.tag)).toEqual(['notice-cse_3']);
+    expect(redis.hashes.get(NOTICE_KEYS.firstSeen('cse'))).toMatchObject({ cse_1: T0 - HOUR, cse_3: T0 });
+  });
+});
+
+describe('department boards', () => {
+  it('are not checked at all while nobody uses them', async () => {
+    addDevice('a', { cse: true, tasks: true });
+    for (let m = 0; m <= 90; m += 1) await runNotificationCycle(T0 + m * MIN);
+    expect(fullReads('me') + quickReads('me') + fullReads('physics') + quickReads('physics')).toBe(0);
+  });
+
+  it('are checked every few minutes for devices with alerts on, and alert like any board', async () => {
+    addDevice('a', { boards: ['me'] });
+    addDevice('b', { boards: ['cse'] });
+    await runNotificationCycle(T0); // the deadline check records that "me" has alerts on
+    await runNotificationCycle(T0 + MIN); // first read of "me": nothing sent for what was already there
+    expect(fullReads('me')).toBe(1);
+    expect(send).not.toHaveBeenCalled();
+
+    boards.me = [notice(101, 'me', T0 + 2 * MIN), ...boards.me!];
+    await runNotificationCycle(T0 + 2 * MIN); // too soon for another check
+    expect(quickReads('me')).toBe(0);
+    await runNotificationCycle(T0 + 6 * MIN);
+    expect(sentTo('a')).toEqual([{ title: 'New 기계 notice', body: 'Notice 101', url: '/?tab=notices&notice=me_101', tag: 'notice-me_101' }]);
+    expect(sentTo('b')).toEqual([]);
+  });
+
+  it('are checked less often when only shown, and dropped two weeks after the last view', async () => {
+    await recordDemand(['physics'], 'view', T0);
+    await runNotificationCycle(T0);
+    expect(fullReads('physics')).toBe(1);
+    for (let m = 1; m <= 30; m++) await runNotificationCycle(T0 + m * MIN);
+    // page 1 every 15 minutes, nothing new, so no re-read
+    expect(quickReads('physics')).toBe(Math.floor(30 / (VIEWED_QUICK_MS / MIN)));
+    expect(fullReads('physics')).toBe(1);
+    await runNotificationCycle(T0 + DEPT_FULL_MS + MIN);
+    expect(fullReads('physics')).toBe(2);
+
+    clearReads();
+    await runNotificationCycle(T0 + 15 * 24 * HOUR);
+    expect(fullReads('physics') + quickReads('physics')).toBe(0);
+  });
+
+  it('keeps each board separately', async () => {
+    await recordDemand(['me'], 'view', T0);
+    await runNotificationCycle(T0);
+    expect((redis.kv.get(NOTICE_KEYS.board('me')) as { notices: unknown[] }).notices).toHaveLength(1);
+    expect((redis.kv.get(NOTICE_KEYS.board('cse')) as { notices: unknown[] }).notices).toHaveLength(2);
+    expect(Object.keys(redis.hashes.get(NOTICE_KEYS.meta)!).sort()).toEqual(['cse', 'international', 'me']);
   });
 });
 
@@ -173,9 +253,9 @@ describe('a board that is down', () => {
     expect(first.noticeCount).toBe(3);
 
     // While it stays down, minute checks don't trigger a full re-read each time.
-    vi.mocked(scrape.scrapeAllBoards).mockClear();
+    clearReads();
     await runNotificationCycle(T0 + 2 * MIN);
-    expect(scrape.scrapeAllBoards).not.toHaveBeenCalled();
+    expect(fullReads()).toBe(0);
 
     const later = await runNotificationCycle(T0 + MIN + BOARD_DOWN_ALERT_MS);
     expect(later.boardsDown).toEqual(['international']);
@@ -282,7 +362,7 @@ describe('cut-off titles', () => {
     expect(snapshot.notices.find((n) => n.id === 'cse_1')!.title).toBe(`${long} (full)`);
     expect(snapshot.notices.find((n) => n.id === 'intl_10')!.title).toBe('Notice 10');
 
-    await refreshNotices(T0 + FULL_REFRESH_MS + MIN);
+    await refreshNotices(T0 + CORE_FULL_MS + MIN);
     expect(scrape.fetchFullTitle).toHaveBeenCalledTimes(1);
   });
 });
@@ -353,7 +433,7 @@ describe('owner mode', () => {
     await runNotificationCycle(T0);
     redis.commands = 0;
     await runNotificationCycle(T0 + MIN);
-    // the usual 5, plus reading the owner's sync time
-    expect(redis.commands).toBeLessThanOrEqual(6);
+    // the usual 6, plus reading the owner's sync time
+    expect(redis.commands).toBeLessThanOrEqual(7);
   });
 });

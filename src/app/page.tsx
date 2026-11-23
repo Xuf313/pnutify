@@ -11,7 +11,7 @@ import { SettingsSheet, type InstallPrompt } from "@/components/SettingsSheet";
 import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
-import { BOARD_IDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { BOARD_IDS, DEFAULT_BOARDS, MAX_SHOWN_BOARDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
 import { createSyncCode, deleteSyncCode, pushSyncCode, readSyncCode } from "@/lib/client/syncCode";
 import { formatDate } from "@/lib/client/time";
@@ -63,6 +63,13 @@ function parseLink(href: string): { tab: Tab | null; noticeId: string | null } {
   }
 }
 
+/** Saved boards in list order (core first), or the core boards for a new device. */
+function shownBoards(stored: unknown): NoticeSource[] {
+  if (!Array.isArray(stored)) return DEFAULT_BOARDS;
+  const list = BOARD_IDS.filter((b) => stored.includes(b)).slice(0, MAX_SHOWN_BOARDS);
+  return list.length > 0 ? list : DEFAULT_BOARDS;
+}
+
 let bootData: Boot | null = null;
 /** Reads everything saved on this device once, on the client only. */
 function boot(): Boot {
@@ -85,7 +92,7 @@ function boot(): Boot {
     cache: cache && Array.isArray(cache.notices) ? { updatedAt: cache.updatedAt || 0, notices: dedupe(cache.notices) } : null,
     sinceTs,
     seedReadSince,
-    boards: Array.isArray(storedBoards) ? BOARD_IDS.filter((b) => storedBoards.includes(b)) : BOARD_IDS,
+    boards: shownBoards(storedBoards),
     seededBoards,
     tab: link.tab ?? "briefing",
     noticeId: link.noticeId,
@@ -128,10 +135,9 @@ function App() {
   const seedReadSince = useRef<number | null>(boot().seedReadSince);
   const seededBoards = useRef(new Set(boot().seededBoards));
   const [boards, setBoardsState] = useState<NoticeSource[]>(() => boot().boards);
-  const setBoards = useCallback((next: NoticeSource[]) => {
-    setBoardsState(next);
-    write(KEYS.boards, next);
-  }, []);
+  const boardsRef = useRef(boards);
+  const pendingRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refetch = useRef<((bypassCache?: boolean) => Promise<void>) | null>(null);
 
   // ---------- deep links: ?tab=notices&notice=<id> (used by push notifications) ----------
   const applyUrl = useCallback((href: string) => {
@@ -144,7 +150,9 @@ function App() {
     lastFetch.current = Date.now();
     try {
       // After a push the shared CDN copy may be up to 30 s old; ask the server directly.
-      const res = await fetch(bypassCache ? `/api/notices?t=${Date.now()}` : "/api/notices", { cache: "no-store" });
+      // Sorted, so every device showing the same boards shares one CDN copy.
+      const query = `boards=${[...boardsRef.current].sort().join(",")}`;
+      const res = await fetch(bypassCache ? `/api/notices?${query}&t=${Date.now()}` : `/api/notices?${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       if (Array.isArray(data.notices)) {
@@ -173,6 +181,13 @@ function App() {
           fresh.forEach((s) => seededBoards.current.add(s));
         }
         write(KEYS.seededBoards, [...seededBoards.current]);
+        // A board read for the first time arrives on the next check; look again shortly.
+        if (Array.isArray(data.pending) && data.pending.length > 0 && !pendingRetry.current) {
+          pendingRetry.current = setTimeout(() => {
+            pendingRetry.current = null;
+            refetch.current?.(true);
+          }, 20_000);
+        }
       }
     } catch {
       setNoticeError(true);
@@ -180,6 +195,10 @@ function App() {
       setLoadingNotices(false);
     }
   }, []);
+
+  useEffect(() => {
+    refetch.current = fetchNotices;
+  }, [fetchNotices]);
 
   // ---------- first load ----------
   useEffect(() => {
@@ -414,6 +433,19 @@ function App() {
     setAlertsState(next);
     return next;
   }, []);
+
+  const setBoards = useCallback(
+    (next: NoticeSource[]) => {
+      const list = shownBoards(next);
+      boardsRef.current = list;
+      setBoardsState(list);
+      write(KEYS.boards, list);
+      fetchNotices();
+      // A hidden board stops alerting too.
+      if (alerts.boards.some((b) => !list.includes(b))) changeAlerts({ boards: alerts.boards.filter((b) => list.includes(b)) }).catch(() => {});
+    },
+    [alerts.boards, changeAlerts, fetchNotices],
+  );
 
   const externalList = useMemo(() => (isOwner ? externalTasks(ownerData, external, now) : []), [isOwner, ownerData, external, now]);
   const allTasks = useMemo(() => [...tasks, ...externalList], [tasks, externalList]);

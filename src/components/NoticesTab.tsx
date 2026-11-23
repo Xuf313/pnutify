@@ -56,7 +56,7 @@ export function NoticesTab(p: Props) {
     counts[n.source] = (counts[n.source] ?? 0) + 1;
   }
 
-  const alertOn = filter === "all" ? p.boards.length > 0 && p.boards.every((b) => p.alerts[b]) : p.alerts[filter];
+  const alertOn = filter === "all" ? p.boards.length > 0 && p.boards.every((b) => p.alerts.boards.includes(b)) : p.alerts.boards.includes(filter);
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -136,7 +136,7 @@ export function NoticesTab(p: Props) {
       {p.staleSources.length > 0 && (
         <p className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
           <TriangleAlert size={14} />
-          The {p.staleSources.map((s) => SOURCE_LABEL[s as NoticeSource] ?? s).join(" and ")} site didn&apos;t respond on the last check, so its list may be a little behind.
+          The {p.staleSources.map((s) => SOURCE_LABEL[s] ?? s).join(" and ")} site didn&apos;t respond on the last check, so its list may be a little behind.
         </p>
       )}
 

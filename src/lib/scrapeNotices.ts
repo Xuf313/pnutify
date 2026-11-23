@@ -1,6 +1,9 @@
 import * as cheerio from 'cheerio';
 
-export type NoticeSource = 'cse' | 'international';
+import { BOARD_DEFS } from './boardList';
+
+/** A board id (see src/lib/boardList.ts). */
+export type NoticeSource = string;
 
 export type ScrapedNotice = {
   id: string;
@@ -25,14 +28,27 @@ export type Board = {
   idPrefix: string;
   /** The list cuts titles at this many characters with no ellipsis (Infinity if it adds "..." instead). */
   titleCut: number;
+  /** Always checked (CSE, International); department boards only when someone uses them. */
+  core: boolean;
 };
 
-export const BOARDS: Board[] = [
-  { source: 'cse', label: 'CSE', name: '정보컴퓨터공학부', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse', titleCut: 50 },
-  { source: 'international', label: 'International', name: '국제처', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl', titleCut: 60 },
-  // The parser also reads boards on PNU's "CMS/Board" system (relative "?…&board_seq=" links, "..." cut-off
-  // titles, a different article layout), used by www.pusan.ac.kr and some department sites.
-];
+/**
+ * Every board the scraper knows, from the shared list. The parser reads K2Web
+ * boards (most PNU sites) and PNU's "CMS/Board" system (relative "?…&board_seq="
+ * links, "..." cut-off titles, its own article layout).
+ */
+export const BOARDS: Board[] = BOARD_DEFS.map((d) => ({
+  source: d.id,
+  label: d.label,
+  name: d.name,
+  url: d.url,
+  origin: new URL(d.url).origin,
+  // "intl" for International keeps the ids older versions stored (read state, pushed lists).
+  idPrefix: d.id === 'international' ? 'intl' : d.id,
+  titleCut: d.titleCut ?? 50,
+  core: d.core === true,
+}));
+export const boardBySource = (source: string) => BOARDS.find((b) => b.source === source);
 
 // Rolling window instead of a hard-coded semester date, so the app keeps
 // working next semester without a code change.
