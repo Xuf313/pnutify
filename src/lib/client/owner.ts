@@ -111,3 +111,27 @@ export function coursePosts(d: OwnerData | null): CoursePost[] {
   const nespa: CoursePost[] = (d.nespa.data?.notices ?? []).map((n) => ({ id: n.id, title: n.title, source: 'NESPA', course: 'NESPA', postedAt: n.postedAt, url: n.url }));
   return [...plato, ...nespa].sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0));
 }
+
+export type AlertStatus = {
+  now: number;
+  lastCheckAt: number | null;
+  lastDeadlineCheckAt: number | null;
+  device: {
+    id: string;
+    subscribed: boolean;
+    inSendList: boolean;
+    ownerDevice: boolean;
+    categories: { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
+    lastPush: { at: number; ok: boolean; status?: number; title: string } | null;
+  };
+  upcoming: { id: string; title: string; source: 'PLATO' | 'NESPA' | 'Task'; dueAt: number; at24: number; at1: number; sent24: boolean; sent1: boolean }[];
+};
+
+export async function fetchAlertStatus(): Promise<AlertStatus | null> {
+  try {
+    const res = await fetch(`/api/owner/alerts?deviceId=${encodeURIComponent(getDeviceId())}`, { cache: 'no-store', credentials: 'same-origin' });
+    return res.ok ? ((await res.json()) as AlertStatus) : null;
+  } catch {
+    return null;
+  }
+}

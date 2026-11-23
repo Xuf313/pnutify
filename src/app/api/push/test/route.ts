@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import webpush, { type PushSubscription } from 'web-push';
 import { getRedis, isValidDeviceId, KEYS } from '@/lib/redis';
+import { OWNER_KEYS } from '@/lib/owner';
 
 /** Sends one test notification to the caller's own device (max once a minute). */
 export async function POST(request: Request) {
@@ -23,8 +24,11 @@ export async function POST(request: Request) {
       JSON.stringify({ title: 'PNUtify alerts are working', body: "You'll get new notices and deadline reminders here.", url: '/', tag: 'test' }),
       { TTL: 600 },
     );
+    await redis.set(OWNER_KEYS.lastPush(deviceId), { at: Date.now(), ok: true, title: 'Test alert' }, { ex: 30 * 86_400 }).catch(() => null);
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Push service rejected the message' }, { status: 502 });
+  } catch (err) {
+    const status = typeof err === 'object' && err !== null && 'statusCode' in err ? Number((err as { statusCode?: number }).statusCode) : undefined;
+    await redis.set(OWNER_KEYS.lastPush(deviceId), { at: Date.now(), ok: false, status, title: 'Test alert' }, { ex: 30 * 86_400 }).catch(() => null);
+    return NextResponse.json({ error: 'Push service rejected the message', status }, { status: 502 });
   }
 }

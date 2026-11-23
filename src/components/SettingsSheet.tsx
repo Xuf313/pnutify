@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, BookOpen, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus } from "lucide-react";
+import { Bell, BookOpen, CircleCheck, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
 import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
-import { relative } from "@/lib/client/time";
+import { formatDue, relative } from "@/lib/client/time";
+import { fetchAlertStatus, type AlertStatus } from "@/lib/client/owner";
 import { THEMES, type AlertCategories, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
@@ -215,6 +216,8 @@ export function SettingsSheet(p: Props) {
   );
 }
 
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Props["ownerActions"] }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -235,14 +238,14 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
           {line(
             "PLATO",
             plato,
-            `${plato?.data?.name ?? ""} · ${plato?.data?.courses.length ?? 0} courses · ${plato?.data?.deadlines.length ?? 0} upcoming deadlines`,
+            `${plato?.data?.name ?? ""} · ${count(plato?.data?.courses.length ?? 0, "course")} · ${count(plato?.data?.deadlines.length ?? 0, "upcoming deadline")}`,
           )}
         </li>
         <li>
           {line(
             "NESPA",
             nespa,
-            `${nespa?.data?.assignments.length ?? 0} assignments · ${nespa?.data?.loggedIn ? "scores included" : "public list only (no scores)"}`,
+            `${count(nespa?.data?.assignments.length ?? 0, "assignment")} · ${nespa?.data?.loggedIn ? "scores included" : "public list only (no scores)"}`,
           )}
         </li>
         <li className="text-muted-foreground">Last checked {data?.checkedAt ? relative(data.checkedAt, now) : "never"} · refreshes every 20 minutes</li>
@@ -275,7 +278,115 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
           {note}
         </p>
       )}
+      <AlertsCheck />
     </section>
+  );
+}
+
+type Line = { ok: boolean; text: string; fix?: string };
+
+/** Owner-only: answers "why didn't I get an alert?" for this device. */
+function AlertsCheck() {
+  const [status, setStatus] = useState<AlertStatus | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const run = async () => {
+    setState("loading");
+    const s = await fetchAlertStatus();
+    setStatus(s);
+    setState(s ? "idle" : "error");
+  };
+
+  const lines: Line[] = [];
+  if (status) {
+    const { now, device: d } = status;
+    const ago = (t: number | null) => (t ? relative(t, now) : "never");
+    const cronOk = status.lastDeadlineCheckAt !== null && now - status.lastDeadlineCheckAt < 15 * 60_000;
+    lines.push(
+      cronOk
+        ? { ok: true, text: `The scheduled check is running (deadlines checked ${ago(status.lastDeadlineCheckAt)}).` }
+        : {
+            ok: false,
+            text: `Deadlines were last checked ${ago(status.lastDeadlineCheckAt)}. Reminders are only sent when the scheduled check runs.`,
+            fix: "Set up the cron-job.org schedule from the README (every 1–2 minutes), and check its history for errors.",
+          },
+    );
+    lines.push(
+      d.subscribed && d.inSendList
+        ? { ok: true, text: "This device is subscribed to alerts." }
+        : { ok: false, text: "This device isn't subscribed to alerts.", fix: "Turn on an alert above. On iPhone, do it in the home-screen app, not in Safari." },
+    );
+    lines.push(
+      d.categories.tasks
+        ? { ok: true, text: "Deadline reminders are on for this device." }
+        : { ok: false, text: "Deadline reminders are off for this device.", fix: "Turn on Deadline reminders above." },
+    );
+    lines.push(
+      d.ownerDevice
+        ? { ok: true, text: "This device is registered as an owner device, so PLATO and NESPA deadlines get reminders here." }
+        : {
+            ok: false,
+            text: "This device isn't registered as an owner device, so PLATO and NESPA deadlines aren't sent here.",
+            fix: "Tap Sign out this device above, then sign in again here with your owner key.",
+          },
+    );
+    if (d.lastPush) {
+      lines.push(
+        d.lastPush.ok
+          ? { ok: true, text: `Last alert to this device: "${d.lastPush.title}", ${ago(d.lastPush.at)}. It was accepted for delivery.` }
+          : {
+              ok: false,
+              text: `Last alert to this device ("${d.lastPush.title}", ${ago(d.lastPush.at)}) was rejected${d.lastPush.status ? ` (${d.lastPush.status})` : ""}.`,
+              fix:
+                d.lastPush.status === 403
+                  ? "The server's alert keys don't match this subscription. Turn all alerts off and on again here."
+                  : "Turn all alerts off and on again here, then send a test alert.",
+            },
+      );
+    } else {
+      lines.push({ ok: true, text: "No alert has been sent to this device yet." });
+    }
+  }
+
+  const reminderText = (sent: boolean, at: number, now: number) =>
+    sent ? "sent" : at <= now ? "due at the next check" : `in ${relative(at, now).replace(/^in /, "")}`;
+
+  return (
+    <div className="mt-4 border-t-2 border-dashed border-border/20 pt-3">
+      <button onClick={run} disabled={state === "loading"} className="text-sm font-bold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
+        <Stethoscope size={15} /> {state === "loading" ? "Checking…" : status ? "Check alerts again" : "Why didn't I get an alert? Check now"}
+      </button>
+      {state === "error" && <p className="mt-2 text-sm font-bold text-[#E5484D]">Couldn&apos;t run the check. Try again in a moment.</p>}
+      {status && (
+        <div className="mt-3 flex flex-col gap-2">
+          <ul className="flex flex-col gap-2">
+            {lines.map((l) => (
+              <li key={l.text} className="flex gap-2 text-sm">
+                {l.ok ? <CircleCheck size={16} className="text-secondary shrink-0 mt-0.5" /> : <TriangleAlert size={16} className="text-[#E5484D] shrink-0 mt-0.5" />}
+                <span>
+                  <span className="font-bold text-foreground">{l.text}</span>
+                  {l.fix && <span className="block text-muted-foreground font-bold">{l.fix}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {status.upcoming.length > 0 && (
+            <div className="mt-1">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Next reminders for this device</p>
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {status.upcoming.map((u) => (
+                  <li key={u.id} className="font-bold">
+                    {u.title} <span className="text-muted-foreground">({u.source}, due {formatDue(u.dueAt, status.now)})</span>
+                    <span className="block text-xs text-muted-foreground">
+                      24 h reminder: {reminderText(u.sent24, u.at24, status.now)} · 1 h reminder: {reminderText(u.sent1, u.at1, status.now)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

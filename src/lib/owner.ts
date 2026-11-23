@@ -26,7 +26,11 @@ export const OWNER_KEYS = {
   pushed: 'owner:pushed-ids',
   syncLock: 'lock:owner-sync',
   manualSync: 'owner:manual-sync',
+  /** The last push sent to an owner device and how it went, for the Alerts check in Settings. */
+  lastPush: (deviceId: string) => `owner:last-push:${deviceId}`,
 } as const;
+
+export type LastPush = { at: number; ok: boolean; status?: number; title: string };
 
 function secret(): string | null {
   const s = process.env.OWNER_SECRET;
