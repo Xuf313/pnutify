@@ -279,6 +279,11 @@ describe('merging two devices', () => {
     expect(merged.external.plato_1).toEqual({ done: true, at: 20 });
   });
 
+  it('keeps "cleared" on PLATO/NESPA items so Clear done sticks on every device', () => {
+    const merged = mergeStates(state({ external: { plato_1: { done: true, cleared: true, at: 30 } } }), state({ external: { plato_1: { done: true, at: 10 } } }));
+    expect(merged.external.plato_1).toEqual({ done: true, cleared: true, at: 30 });
+  });
+
   it('a task edited after it was deleted elsewhere comes back', () => {
     const merged = mergeStates(state({ tasks: [task('a', 50)] }), state({ deleted: { a: 40 } }));
     expect(merged.tasks.map((t) => t.id)).toEqual(['a']);

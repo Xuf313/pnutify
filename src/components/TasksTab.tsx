@@ -11,7 +11,8 @@ type Actions = {
   update: (id: string, patch: Partial<Task>) => void;
   toggle: (id: string) => void;
   remove: (id: string) => void;
-  clearCompleted: () => void;
+  /** Clears these finished items from the list (own tasks are deleted; PLATO/NESPA items are hidden). */
+  clearCompleted: (ids: string[]) => void;
 };
 
 type Props = { now: number; tasks: Task[]; actions: Actions; alerts: AlertCategories; openSettings: () => void; /** Owner mode: tasks sync across devices. */ synced?: boolean };
@@ -49,15 +50,15 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
         </div>
         <button
           onClick={() => setAdding((v) => !v)}
-          className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-3 py-2 flex items-center gap-1.5"
+          className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-3 py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap"
           aria-expanded={adding}
         >
           {adding ? <X size={18} /> : <Plus size={18} />} {adding ? "Close" : "Add"}
         </button>
       </div>
 
-      <button onClick={openSettings} className="self-start text-sm font-bold flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
-        {alerts.tasks ? <Bell size={15} className="text-primary" /> : <BellOff size={15} />}
+      <button onClick={openSettings} className="self-start text-left text-sm font-bold flex items-start gap-1.5 text-muted-foreground hover:text-foreground">
+        {alerts.tasks ? <Bell size={15} className="text-primary shrink-0 mt-0.5" /> : <BellOff size={15} className="shrink-0 mt-0.5" />}
         {alerts.tasks ? "Reminders on: 24 hours and 1 hour before each deadline" : "Reminders off. Turn them on in Settings."}
       </button>
 
@@ -115,7 +116,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
         <section className="mt-2">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-pixel text-sm font-bold uppercase tracking-wider text-muted-foreground">Done ({completed.length})</h2>
-            <button onClick={actions.clearCompleted} className="text-sm font-bold text-primary hover:underline">
+            <button onClick={() => actions.clearCompleted(completed.map((t) => t.id))} className="text-sm font-bold text-primary hover:underline">
               Clear done
             </button>
           </div>

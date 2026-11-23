@@ -362,11 +362,19 @@ function App() {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         tombstone([id]);
       },
-      clearCompleted: () => {
-        setTasks((prev) => {
-          tombstone(prev.filter((t) => t.status === "completed").map((t) => t.id));
-          return prev.filter((t) => t.status !== "completed");
-        });
+      clearCompleted: (ids: string[]) => {
+        const isExternal = (id: string) => id.startsWith("plato_") || id.startsWith("nespa_");
+        const own = new Set(ids.filter((id) => !isExternal(id)));
+        const external = ids.filter(isExternal);
+        if (own.size > 0) {
+          setTasks((prev) => prev.filter((t) => !own.has(t.id)));
+          tombstone([...own]);
+        }
+        // PLATO/NESPA items can't be deleted from there; hide them here (and on the owner's other devices).
+        if (external.length > 0) {
+          const at = stamp();
+          setExternal((prev) => ({ ...prev, ...Object.fromEntries(external.map((id) => [id, { done: true, cleared: true, at }])) }));
+        }
       },
     };
   }, []);

@@ -202,8 +202,8 @@ export function BriefingTab(p: Props) {
             </div>
           </div>
         </figure>
-        <p className="brief-blurb">{blurb}</p>
         <p className="brief-caption">{paintingCaption(painting)}</p>
+        <p className="brief-blurb">{blurb}</p>
       </header>
 
       {problems.map((msg) => (

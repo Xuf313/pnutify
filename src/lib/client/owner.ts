@@ -48,7 +48,7 @@ export type SyncState = {
   tasks: Task[];
   deleted: Record<string, number>;
   readIds: string[];
-  external: Record<string, { done: boolean; at: number }>;
+  external: Record<string, { done: boolean; at: number; cleared?: boolean }>;
 };
 
 /** Sends this device's copy; the server merges it with the other devices' and returns the result. */
@@ -71,6 +71,7 @@ export async function pushOwnerState(state: SyncState): Promise<SyncState | null
 export function externalTasks(d: OwnerData | null, external: SyncState['external'], now: number): Task[] {
   if (!d) return [];
   const done = (id: string) => external[id]?.done === true;
+  const cleared = (id: string) => external[id]?.cleared === true;
   const plato: Task[] = (d.plato.data?.deadlines ?? []).map((x) => ({
     id: x.id,
     title: x.title,
@@ -94,7 +95,7 @@ export function externalTasks(d: OwnerData | null, external: SyncState['external
       source: 'nespa',
       url: a.url,
     }));
-  return [...plato, ...nespa];
+  return [...plato, ...nespa].filter((t) => !cleared(t.id));
 }
 
 export function coursePosts(d: OwnerData | null): CoursePost[] {
