@@ -178,7 +178,12 @@ export function BriefingTab(p: Props) {
   return (
     <div className="brief pb-4">
       {/* ---------- hero: the painting of the day ---------- */}
-      <header>
+      <header className="brief-masthead">
+        <p className="brief-dateline">
+          <span>{formatDate(now, { year: "numeric", month: "long", day: "numeric" })}</span>
+          <span>Pusan National University</span>
+        </p>
+        <h1 className="brief-day">{weekday} Brief</h1>
         <figure className="brief-frame">
           <div className="brief-frame__canvas">
             <Image
@@ -192,9 +197,6 @@ export function BriefingTab(p: Props) {
               style={{ objectPosition: painting.focus ?? "50% 50%" }}
               onLoad={() => setLoadedSlug(painting.slug)}
             />
-            <div className="brief-frame__overlay">
-              <h1 className="brief-day">{weekday} Brief</h1>
-            </div>
           </div>
         </figure>
         <p className="brief-caption">{paintingCaption(painting)}</p>
@@ -224,6 +226,8 @@ export function BriefingTab(p: Props) {
         </section>
       )}
 
+      <div className="brief-cols">
+      <div>
       {/* ---------- to-dos ---------- */}
       <section className="brief-section">
         <h2 className="brief-h2">
@@ -257,6 +261,7 @@ export function BriefingTab(p: Props) {
         )}
       </section>
 
+      </div>
       {/* ---------- new updates ---------- */}
       <section className="brief-section">
         <h2 className="brief-h2">New updates</h2>
@@ -296,6 +301,8 @@ export function BriefingTab(p: Props) {
           </div>
         )}
       </section>
+
+      </div>
 
       {/* ---------- your day ---------- */}
       {dayParts.length > 0 && (

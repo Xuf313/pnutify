@@ -172,7 +172,7 @@ export function NoticesTab(p: Props) {
                 <button onClick={() => p.onOpenNotice(n.id)} className="group flex-1 min-w-0 text-left py-3.5 flex gap-3 items-start">
                   <span className={cn("mt-[0.55rem] w-2 h-2 rounded-full shrink-0", isRead ? "bg-transparent" : "bg-primary")} aria-hidden />
                   <span className="flex-1 min-w-0">
-                    <span className={cn("block leading-snug group-hover:underline underline-offset-[3px] decoration-1", isRead ? "text-muted-foreground" : "font-semibold text-foreground")}>{n.title}</span>
+                    <span className={cn("block leading-snug group-hover:underline underline-offset-[3px] decoration-1", isRead ? "font-display text-[1.05rem] text-muted-foreground" : "font-display font-bold text-[1.05rem] tracking-[-0.01em] text-foreground")}>{n.title}</span>
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[13px] text-muted-foreground">
                       <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
                         <BoardIcon source={n.source} size={13} className="text-muted-foreground" />

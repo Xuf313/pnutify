@@ -390,3 +390,75 @@ body {
 @media (min-width: 768px) {
   .brief-frame__canvas { aspect-ratio: 16 / 9; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   STYLE: Editorial. The Briefing as the front page of a daily paper:
+   a nameplate, rules instead of boxes, serif headlines everywhere,
+   PNU blue as the only colour and a spot red for deadlines.
+   ══════════════════════════════════════════════════════════════ */
+:root:not([data-theme]), [data-theme="pnu"] {
+  --t-background: #FFFFFF;
+  --t-card: #FFFFFF;
+  --t-foreground: #16191F;
+  --t-ink: #16191F;
+  --t-primary: #1650A8;
+  --t-signal: #C8102E;
+  --t-muted: #F1F2F4;
+  --t-muted-fg: #5D636E;
+  --t-border: #D9DCE1;
+}
+[data-theme="night"] { --t-signal: #FF6B6B; --t-ink: #E6EAF2; }
+
+/* Nameplate */
+.brief-masthead { text-align: center; }
+.brief-dateline {
+  display: flex; justify-content: space-between; gap: 1rem;
+  font-size: 0.78rem; color: var(--color-muted-foreground);
+  padding-bottom: 0.45rem; border-bottom: 1px solid var(--color-ink);
+}
+.brief-masthead .brief-day {
+  font-family: var(--font-display); font-weight: 800; color: var(--color-foreground); text-shadow: none;
+  font-size: clamp(2.6rem, 12vw, 4.2rem); line-height: 1; letter-spacing: -0.035em;
+  padding: 0.9rem 0 0.8rem; margin-bottom: 1.1rem;
+  border-bottom: 3px double var(--color-ink);
+}
+.brief-masthead .brief-frame__canvas { border-radius: 0; aspect-ratio: 3 / 2; }
+.brief-masthead .brief-caption { text-align: left; font-style: italic; border-bottom: 1px solid var(--color-border); padding-bottom: 0.6rem; }
+.brief-masthead .brief-blurb { text-align: left; font-size: 1.65rem; line-height: 1.25; font-weight: 700; letter-spacing: -0.025em; margin-top: 1.1rem; }
+
+/* Sections open with a heavy rule, like a page's section break */
+.brief-section { border-top: 2px solid var(--color-ink); padding-top: 0.7rem; margin-top: 2.2rem; }
+.brief-h2 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+
+/* Next stop becomes a boxed "notice" set in the column */
+.brief-push { border-radius: 0; border: 0; border-top: 2px solid var(--color-ink); border-bottom: 1px solid var(--color-ink); padding-left: 0; padding-right: 0; background: transparent; }
+.brief-push__rail::before { top: 0.4rem; bottom: -0.4rem; background: var(--color-signal); }
+.brief-push__cta { border-radius: 0; }
+
+/* Updates are headlines */
+.brief-item__title { font-family: var(--font-display); font-weight: 700; font-size: 1.08rem; letter-spacing: -0.01em; }
+.brief-item:first-child .brief-item__title { font-size: 1.35rem; line-height: 1.25; }
+.brief-item.is-read .brief-item__title { font-weight: 500; }
+.brief-todo__label { font-family: var(--font-display); font-weight: 600; }
+
+/* Desktop: two columns with a column rule */
+@media (min-width: 768px) {
+  .brief-masthead .brief-frame__canvas { aspect-ratio: 2 / 1; }
+}
+@media (min-width: 1024px) {
+  .brief { max-width: 56rem; }
+  .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
+  .brief-cols > :last-child { position: relative; }
+  .brief-cols > :last-child::before { content: ""; position: absolute; left: -1.25rem; top: 2.2rem; bottom: 0; border-left: 1px solid var(--color-border); }
+}
+
+/* The week line in ink, deadlines in spot red */
+.route::before { height: 2px; background: var(--color-ink); top: calc(0.6rem + 1.05rem - 1px); }
+.route__stop span { border-width: 2px; border-color: var(--color-ink); }
+
+/* Pages: serif headlines with a double rule, notice titles as headlines */
+main h1.font-pixel { font-weight: 800; letter-spacing: -0.03em; padding-bottom: 0.35rem; }
+.stops::before { width: 2px; left: 14px; background: var(--color-ink); }
+.stop__marker::before { border-width: 2px; border-color: var(--color-ink); }
+.stop.is-overdue .stop__marker::before { border-color: var(--color-signal); }
+[role="tablist"] + div input, main input[type="search"] { border-radius: 0; }
