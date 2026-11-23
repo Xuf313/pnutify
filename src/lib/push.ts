@@ -3,12 +3,13 @@ import { getRedis, KEYS, withLock } from './redis';
 import { BOARD_DOWN_ALERT_MS, refreshNotices, type Notice } from './notices';
 import { OWNER_KEYS, ownerEnabled, type LastPush } from './owner';
 import { BOARDS, type NoticeSource } from './scrapeNotices';
+import { weeklyMessage, weeklyWindow } from './weekly';
 import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
 /** One switch per board, plus deadlines; `courses` (PLATO and NESPA posts) only applies to owner devices. */
-export type Categories = Record<NoticeSource, boolean> & { tasks: boolean; courses: boolean };
+export type Categories = Record<NoticeSource, boolean> & { tasks: boolean; weekly: boolean; courses: boolean };
 /** Nothing is on until the student turns it on. */
-export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, pnu: false, tasks: false, courses: false };
+export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, pnu: false, tasks: false, weekly: false, courses: false };
 
 export function normalizeCategories(value: unknown): Categories {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
@@ -17,6 +18,7 @@ export function normalizeCategories(value: unknown): Categories {
     international: v.international === true,
     pnu: v.pnu === true,
     tasks: v.tasks === true,
+    weekly: v.weekly === true,
     courses: v.courses === true,
   };
 }
@@ -202,7 +204,17 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
       }
     }
 
-    const handleDevice = async (deviceId: string, subscription: unknown, rawCategories: unknown, rawTasks: unknown, rawNotified: unknown) => {
+    // Sunday evening (KST): the coming week's preview, once per device per week. Checked with deadlines.
+    const week = checkDeadlines ? weeklyWindow(now) : null;
+
+    const handleDevice = async (
+      deviceId: string,
+      subscription: unknown,
+      rawCategories: unknown,
+      rawTasks: unknown,
+      rawNotified: unknown,
+      weeklySentFor: unknown,
+    ) => {
       if (!subscription || typeof subscription !== 'object' || !('endpoint' in subscription)) {
         await redis.srem(KEYS.devices, deviceId);
         report.pruned++;
@@ -299,6 +311,18 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
       const remember = (r: LastPush) =>
         isOwner ? redis.set(OWNER_KEYS.lastPush(deviceId), r, { ex: 30 * 86_400 }).catch(() => null) : Promise.resolve(null);
 
+      if (week && categories.weekly && weeklySentFor !== week.weekKey) {
+        const own = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
+        const all = (isOwner ? [...own, ...ownerDeadlines] : own).map((t) => ({
+          title: t.title,
+          dueDate: typeof t.dueDate === 'number' ? t.dueDate : Date.parse(t.dueDate),
+        }));
+        const msg = weeklyMessage(all, week);
+        // Recorded before sending, like reminders, so overlapping runs never send it twice.
+        await redis.set(KEYS.weeklySent(deviceId), week.weekKey, { ex: 14 * 86_400 });
+        outgoing.push({ payload: { ...msg, url: '/?tab=briefing', tag: 'weekly-preview' }, urgency: 'normal' });
+      }
+
       for (const { payload, urgency } of outgoing) {
         try {
           await webpush.sendNotification(subscription as PushSubscription, JSON.stringify(payload), { TTL: 6 * 60 * 60, urgency });
@@ -323,11 +347,11 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
     // One read per batch of devices instead of four per device.
     for (let i = 0; i < deviceIds.length; i += DEVICE_BATCH) {
       const ids = deviceIds.slice(i, i + DEVICE_BATCH);
-      const keys = ids.flatMap((id) => [KEYS.subscription(id), KEYS.categories(id), KEYS.tasks(id), KEYS.notifiedDeadlines(id)]);
+      const keys = ids.flatMap((id) => [KEYS.subscription(id), KEYS.categories(id), KEYS.tasks(id), KEYS.notifiedDeadlines(id), KEYS.weeklySent(id)]);
       const values = await redis.mget<unknown[]>(...keys);
       await Promise.all(
         ids.map((id, j) =>
-          handleDevice(id, values[j * 4], values[j * 4 + 1], values[j * 4 + 2], values[j * 4 + 3]).catch((e) =>
+          handleDevice(id, values[j * 5], values[j * 5 + 1], values[j * 5 + 2], values[j * 5 + 3], values[j * 5 + 4]).catch((e) =>
             console.error('[push] device error', e),
           ),
         ),

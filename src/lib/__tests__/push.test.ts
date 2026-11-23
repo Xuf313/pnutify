@@ -52,7 +52,7 @@ function notice(n: number, source: NoticeSource = 'cse', postedAt = T0, title = 
   return { id: `${prefix}_${n}`, title, date: '2026.11.19', postedAt, source, url: `https://example.pusan.ac.kr/${n}`, pinned: false };
 }
 
-function addDevice(id: string, categories: Partial<Record<'cse' | 'international' | 'tasks' | 'courses', boolean>>, tasks: unknown[] = []) {
+function addDevice(id: string, categories: Partial<Record<'cse' | 'international' | 'pnu' | 'tasks' | 'weekly' | 'courses', boolean>>, tasks: unknown[] = []) {
   redis.kv.set(KEYS.subscription(id), { endpoint: `https://push.example/${id}`, keys: { p256dh: 'p', auth: 'a' } });
   redis.kv.set(KEYS.categories(id), { cse: false, international: false, tasks: false, courses: false, ...categories });
   redis.kv.set(KEYS.tasks(id), tasks);
@@ -231,6 +231,31 @@ describe('deadline reminders', () => {
     expect((await runNotificationCycle(T0)).deadlinesChecked).toBe(true);
     expect((await runNotificationCycle(T0 + MIN)).deadlinesChecked).toBe(false);
     expect((await runNotificationCycle(T0 + 5 * MIN)).deadlinesChecked).toBe(true);
+  });
+});
+
+describe('weekly preview', () => {
+  const SUN_EVENING = Date.parse('2026-11-22T20:30:00+09:00');
+  const task = (id: string, title: string, iso: string) => ({ id, title, course: 'OS', dueDate: Date.parse(`${iso}+09:00`) });
+
+  it('goes out once on Sunday evening to devices that turned it on', async () => {
+    addDevice('a', { weekly: true }, [task('t1', 'OS HW', '2026-11-24T10:00:00'), task('t2', 'Quiz', '2026-11-26T18:00:00')]);
+    addDevice('b', { tasks: true }, [task('t3', 'Later', '2026-12-24T10:00:00')]);
+
+    await runNotificationCycle(SUN_EVENING);
+    expect(sentTo('a')).toEqual([{ title: 'Your week: 2 deadlines', body: 'Tue: OS HW · Thu: Quiz', url: '/?tab=briefing', tag: 'weekly-preview' }]);
+    expect(sentTo('b')).toEqual([]);
+
+    await runNotificationCycle(SUN_EVENING + 10 * MIN);
+    await runNotificationCycle(SUN_EVENING + 60 * MIN);
+    expect(sentTo('a')).toHaveLength(1);
+  });
+
+  it('is not sent at other times', async () => {
+    addDevice('a', { weekly: true }, [task('t1', 'OS HW', '2026-11-24T10:00:00')]);
+    await runNotificationCycle(Date.parse('2026-11-22T19:00:00+09:00'));
+    await runNotificationCycle(Date.parse('2026-11-23T09:00:00+09:00'));
+    expect(send).not.toHaveBeenCalled();
   });
 });
 

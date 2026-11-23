@@ -35,6 +35,7 @@ type Props = {
 
 type AlertRow = { key: keyof AlertCategories; title: string; body: string };
 const TASK_ROW: AlertRow = { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" };
+const WEEKLY_ROW: AlertRow = { key: "weekly", title: "Weekly preview", body: "Sunday at 8 pm: the coming week's deadlines, day by day" };
 const boardRow = (b: (typeof BOARDS)[number]): AlertRow => ({ key: b.id, title: `${b.label} notices`, body: `New posts on the ${b.name} board` });
 
 const COURSE_ROW = { key: "courses" as const, title: "PLATO & NESPA posts", body: "New course announcements and NESPA notices (owner only)" };
@@ -45,7 +46,7 @@ export function SettingsSheet(p: Props) {
   const support = pushSupport();
   const anyOn = Object.values(p.alerts).some(Boolean);
   // One switch per board this device shows, then deadlines (and course posts for the owner).
-  const rows: AlertRow[] = [...BOARDS.filter((b) => p.boards.includes(b.id)).map(boardRow), TASK_ROW, ...(p.isOwner ? [COURSE_ROW] : [])];
+  const rows: AlertRow[] = [...BOARDS.filter((b) => p.boards.includes(b.id)).map(boardRow), TASK_ROW, WEEKLY_ROW, ...(p.isOwner ? [COURSE_ROW] : [])];
 
   const toggle = async (key: keyof AlertCategories, value: boolean) => {
     setBusy(key);

@@ -334,18 +334,18 @@ function App() {
     return () => clearTimeout(t);
   }, [tasks, readIds, external, deletedTasks, syncState]);
 
-  // Deadline reminders need a server-side copy of upcoming tasks — only while that alert is on.
+  // Deadline reminders and the weekly preview need a server-side copy of upcoming tasks; only while one of them is on.
   useEffect(() => {
     if (!alertsReady) return;
     const t = setTimeout(() => {
       fetch("/api/tasks/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks ? tasks : [] }),
+        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks || alerts.weekly ? tasks : [] }),
       }).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
-  }, [tasks, alerts.tasks, alertsReady]);
+  }, [tasks, alerts.tasks, alerts.weekly, alertsReady]);
 
   // ---------- actions ----------
   const markRead = useCallback((ids: string[], value = true) => {

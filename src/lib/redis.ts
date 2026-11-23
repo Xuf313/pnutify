@@ -42,6 +42,8 @@ export const KEYS = {
   categories: (id: string) => `push:categories:${id}`,
   tasks: (id: string) => `tasks:list:${id}`,
   notifiedDeadlines: (id: string) => `push:notified-deadlines:${id}`,
+  /** The week (its Monday) whose preview was last sent to this device. */
+  weeklySent: (id: string) => `push:weekly-sent:${id}`,
   latestNotices: 'notices:latest',
   checkedAt: 'notices:checked-at',
   firstSeen: 'notices:first-seen',

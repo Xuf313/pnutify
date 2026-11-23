@@ -40,7 +40,7 @@ export const THEMES: { id: Theme; label: string; swatch: string }[] = [
 ];
 
 /** One switch per board, plus deadline reminders and (owner only) course posts. */
-export type AlertCategories = Record<NoticeSource, boolean> & { tasks: boolean; courses: boolean };
+export type AlertCategories = Record<NoticeSource, boolean> & { tasks: boolean; weekly: boolean; courses: boolean };
 
 // ---------- owner mode (PLATO and NESPA, for the site owner only) ----------
 
