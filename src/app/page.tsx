@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarDays, ListTodo, Newspaper, Settings, Sunrise } from "lucide-react";
-import { AppLogo, cn } from "@/components/ui";
+import { AppLogo, cn, Toast } from "@/components/ui";
 import { BriefingTab } from "@/components/BriefingTab";
 import { NoticesTab } from "@/components/NoticesTab";
-import { TasksTab } from "@/components/TasksTab";
+import { TasksTab, type TaskActions } from "@/components/TasksTab";
 import { CalendarTab } from "@/components/CalendarTab";
-import { SettingsSheet, type InstallPrompt } from "@/components/SettingsSheet";
+import { SettingsSheet, type InstallPrompt, type SettingsSection } from "@/components/SettingsSheet";
 import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
@@ -15,7 +15,7 @@ import { BOARD_IDS, DEFAULT_BOARDS, MAX_SHOWN_BOARDS, TABS, type AlertCategories
 import { cachedCalendar, calendarTasks, linkCalendar, loadCalendar, unlinkCalendar, type CalendarView } from "@/lib/client/platoCalendar";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
 import { createSyncCode, deleteSyncCode, pushSyncCode, readSyncCode } from "@/lib/client/syncCode";
-import { formatDate } from "@/lib/client/time";
+import { addDays, formatDate, formatDue, fromKst, kstDay } from "@/lib/client/time";
 import { isFreshNotice } from "@/lib/client/notices";
 
 /** While the app is open and visible. The server checks the boards every minute. */
@@ -27,6 +27,16 @@ const NAV: { id: Tab; label: string; icon: typeof Sunrise }[] = [
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
 ];
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "HH:mm" in Korea time. */
+const kstClock = (t: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t);
+
+/** How long Undo stays possible (the toast shows for 5 s). */
+const UNDO_MS = 5500;
+
+type ToastState = { id: number; message: string; action?: string; onAction?: () => void };
 
 function dedupe(list: Notice[]): Notice[] {
   const seen = new Set<string>();
@@ -82,6 +92,8 @@ function boot(): Boot {
   getDeviceId();
   const cache = read<NoticeCache | null>(KEYS.notices, null);
   const link = parseLink(window.location.href);
+  // Visiting with ?owner shows the owner sign-in in Settings on this device from then on.
+  if (new URL(window.location.href).searchParams.has("owner")) write(KEYS.ownerHint, true);
   const sinceTs = read<number>(KEYS.lastVisit, 0) || Date.now() - 2 * 86_400_000;
   const seed = read<number | "done" | null>(KEYS.readSeed, null);
   const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
@@ -125,6 +137,16 @@ function App() {
   const [alerts, setAlertsState] = useState<AlertCategories>(NO_ALERTS);
   const [alertsReady, setAlertsReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [ownerHint] = useState(() => read<boolean>(KEYS.ownerHint, false));
+  const [toast, setToast] = useState<ToastState | null>(null);
+  /** Day the Calendar should open on (from the Briefing's week strip). */
+  const [calendarFocus, setCalendarFocus] = useState<{ day: string; n: number } | null>(null);
+  /** Open Tasks with its add form, optionally due on a given day. */
+  const [taskDraft, setTaskDraft] = useState<{ day: string | null; n: number } | null>(null);
+  /** Tasks deleted a moment ago: hidden now, removed for good once Undo has passed. */
+  const [hiddenTasks, setHiddenTasks] = useState<Set<string>>(() => new Set());
+  const pendingCommits = useRef(new Map<string, { run: () => void; timer: ReturnType<typeof setTimeout> }>());
   const [openNoticeId, setOpenNoticeId] = useState<string | null>(() => boot().noticeId);
   const [sinceTs] = useState(() => boot().sinceTs);
   const [now, setNow] = useState(() => Date.now());
@@ -510,8 +532,11 @@ function App() {
     const stamp = () => Date.now();
     const tombstone = (ids: string[]) => setDeletedTasks((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, stamp()])) }));
     return {
-      add: (t: Omit<Task, "id" | "status" | "createdAt">) =>
-        setTasks((prev) => [{ ...t, id: `own_${Date.now().toString(36)}`, status: "pending", createdAt: stamp(), updatedAt: stamp(), source: "own" }, ...prev]),
+      add: (t: Omit<Task, "id" | "status" | "createdAt">) => {
+        const id = `own_${Date.now().toString(36)}`;
+        setTasks((prev) => [{ ...t, id, status: "pending", createdAt: stamp(), updatedAt: stamp(), source: "own" }, ...prev]);
+        return id;
+      },
       update: (id: string, patch: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: stamp() } : t))),
       toggle: (id: string) => {
         // PLATO/NESPA items can't be edited, only ticked off (shared across the owner's devices).
@@ -540,6 +565,116 @@ function App() {
       },
     };
   }, []);
+
+  // ---------- undo: deletions wait a few seconds, and every change says what happened ----------
+  const showToast = useCallback((t: Omit<ToastState, "id">) => setToast({ id: Date.now(), ...t }), []);
+  const unhide = useCallback((ids: string[]) => {
+    setHiddenTasks((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, []);
+  /** Hides `ids` now and runs `commit` once Undo is no longer possible. */
+  const deferDelete = useCallback(
+    (ids: string[], commit: () => void, message: string) => {
+      const key = `${Date.now()}:${ids.join(",")}`;
+      setHiddenTasks((prev) => new Set([...prev, ...ids]));
+      const run = () => {
+        const entry = pendingCommits.current.get(key);
+        if (!entry) return;
+        clearTimeout(entry.timer);
+        pendingCommits.current.delete(key);
+        commit();
+        unhide(ids);
+      };
+      pendingCommits.current.set(key, { run, timer: setTimeout(run, UNDO_MS) });
+      showToast({
+        message,
+        action: "Undo",
+        onAction: () => {
+          const entry = pendingCommits.current.get(key);
+          if (entry) clearTimeout(entry.timer);
+          pendingCommits.current.delete(key);
+          unhide(ids);
+        },
+      });
+    },
+    [showToast, unhide],
+  );
+  // Leaving the page finishes any pending deletion, so it isn't lost.
+  useEffect(() => {
+    const flush = () => [...pendingCommits.current.values()].forEach((e) => e.run());
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
+  const uiTaskActions: TaskActions = useMemo(
+    () => ({
+      add: (t) => {
+        const id = taskActions.add(t);
+        showToast({ message: `Added "${t.title}" · ${formatDue(t.dueDate, Date.now())}`, action: "Undo", onAction: () => taskActions.remove(id) });
+      },
+      update: taskActions.update,
+      toggle: taskActions.toggle,
+      remove: (id) => {
+        const t = latest.current.tasks.find((x) => x.id === id);
+        deferDelete([id], () => taskActions.remove(id), `Deleted "${t?.title ?? "task"}"`);
+      },
+      clearCompleted: (ids) => deferDelete(ids, () => taskActions.clearCompleted(ids), `Cleared ${plural(ids.length, "finished task")}`),
+      postpone: (id) => {
+        const t = latest.current.tasks.find((x) => x.id === id);
+        if (!t) return;
+        const before = t.dueDate;
+        taskActions.update(id, { dueDate: fromKst(addDays(kstDay(Date.now()), 1), kstClock(before)) });
+        showToast({ message: `Moved "${t.title}" to tomorrow`, action: "Undo", onAction: () => taskActions.update(id, { dueDate: before }) });
+      },
+    }),
+    [taskActions, deferDelete, showToast],
+  );
+
+  const markAllRead = useCallback(
+    (ids: string[]) => {
+      markRead(ids);
+      showToast({ message: `Marked ${plural(ids.length, "notice")} as read`, action: "Undo", onAction: () => markRead(ids, false) });
+    },
+    [markRead, showToast],
+  );
+
+  const openSettings = useCallback((section?: SettingsSection) => {
+    setSettingsSection(section ?? null);
+    setSettingsOpen(true);
+  }, []);
+  const addTask = useCallback((day: string | null = null) => {
+    setTaskDraft({ day, n: Date.now() });
+    setTab("tasks");
+  }, []);
+  const openCalendarDay = useCallback((day: string) => {
+    setCalendarFocus({ day, n: Date.now() });
+    setTab("calendar");
+  }, []);
+
+  // ---------- keyboard shortcuts: / search, n new task, 1-4 sections ----------
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key === "/") {
+        e.preventDefault();
+        setTab("notices");
+        // The list renders for phone and desktop; focus the one that's showing.
+        setTimeout(() => [...document.querySelectorAll<HTMLInputElement>("#notice-search")].find((x) => x.offsetParent !== null)?.focus(), 30);
+      } else if (e.key === "n") {
+        e.preventDefault();
+        addTask();
+      } else if (/^[1-4]$/.test(e.key)) {
+        setTab(NAV[Number(e.key) - 1].id);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [addTask]);
 
   const ownerActions = useMemo(
     () => ({
@@ -572,7 +707,12 @@ function App() {
   // Only the boards this device shows count anywhere (lists, Briefing, badges).
   const shownNotices = useMemo(() => notices.filter((n) => boards.includes(n.source)), [notices, boards]);
   const unreadCount = useMemo(() => shownNotices.filter((n) => !readIds.has(n.id)).length, [shownNotices, readIds]);
-  const pendingCount = useMemo(() => allTasks.filter((t) => t.status === "pending").length, [allTasks]);
+  const visibleTasks = useMemo(() => (hiddenTasks.size ? allTasks.filter((t) => !hiddenTasks.has(t.id)) : allTasks), [allTasks, hiddenTasks]);
+  // The Tasks badge means "act now": overdue or due today only.
+  const urgentCount = useMemo(() => {
+    const today = kstDay(now);
+    return visibleTasks.filter((t) => t.status === "pending" && (t.dueDate < now || kstDay(t.dueDate) === today)).length;
+  }, [visibleTasks, now]);
 
   const content = (
     <>
@@ -582,7 +722,7 @@ function App() {
           sinceTs={sinceTs}
           notices={shownNotices}
           readIds={readIds}
-          tasks={allTasks}
+          tasks={visibleTasks}
           posts={posts}
           ownerData={isOwner ? ownerData : null}
           onOpenPost={(post) => {
@@ -595,7 +735,9 @@ function App() {
           onOpenNotice={openNotice}
           onToggleTask={taskActions.toggle}
           goTo={setTab}
-          openSettings={() => setSettingsOpen(true)}
+          openSettings={openSettings}
+          openCalendarDay={openCalendarDay}
+          addTask={() => addTask()}
         />
       )}
       {tab === "notices" && (
@@ -612,18 +754,31 @@ function App() {
           alertsReady={alertsReady}
           onOpenNotice={openNotice}
           onMarkRead={markRead}
+          onMarkAllRead={markAllRead}
           onRetry={() => fetchNotices()}
-          openSettings={() => setSettingsOpen(true)}
+          openSettings={() => openSettings("alerts")}
         />
       )}
       {tab === "tasks" && (
-        <TasksTab now={now} tasks={allTasks} synced={isOwner || Boolean(syncCode)} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
+        <TasksTab
+          key={taskDraft?.n ?? "tasks"}
+          now={now}
+          tasks={visibleTasks}
+          synced={isOwner || Boolean(syncCode)}
+          actions={uiTaskActions}
+          alerts={alerts}
+          openSettings={() => openSettings("alerts")}
+          draft={taskDraft}
+          onDraftDone={() => setTaskDraft(null)}
+        />
       )}
-      {tab === "calendar" && <CalendarTab now={now} tasks={allTasks} onToggleTask={taskActions.toggle} goTo={setTab} />}
+      {tab === "calendar" && (
+        <CalendarTab key={calendarFocus?.n ?? "calendar"} now={now} tasks={visibleTasks} onToggleTask={taskActions.toggle} onAddTask={(day) => addTask(day)} focusDay={calendarFocus?.day} />
+      )}
     </>
   );
 
-  const badge = (id: Tab) => (id === "notices" ? unreadCount : id === "tasks" ? pendingCount : 0);
+  const badge = (id: Tab) => (id === "notices" ? unreadCount : id === "tasks" ? urgentCount : 0);
 
   return (
     <div className="font-sans selection:bg-primary/20 selection:text-foreground min-h-[100dvh]">
@@ -642,7 +797,7 @@ function App() {
               <p className="text-xs font-bold text-primary mt-0.5">{formatDate(now, { weekday: "long", month: "short", day: "numeric" })}</p>
             </div>
           </div>
-          <button onClick={() => setSettingsOpen(true)} className="cozy-btn bg-card p-2 text-foreground" aria-label="Settings">
+          <button onClick={() => openSettings()} className="cozy-btn bg-card p-2 text-foreground" aria-label="Settings">
             <Settings size={20} />
           </button>
         </header>
@@ -673,7 +828,7 @@ function App() {
                 <Icon size={22} />
                 <span className="text-[11px] font-extrabold">{label}</span>
                 {badge(id) > 0 && (
-                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-secondary text-secondary-foreground text-[11px] font-extrabold flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
+                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-soon text-soon-foreground text-[11px] font-extrabold tabular-nums flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
                     {badge(id) > 99 ? "99+" : badge(id)}
                   </span>
                 )}
@@ -685,7 +840,7 @@ function App() {
 
       {/* ---------- tablet / desktop ---------- */}
       <div className="hidden md:flex h-[100dvh] overflow-hidden">
-        <aside className="w-64 lg:w-72 shrink-0 flex flex-col border-r-2 border-border bg-card/80 backdrop-blur-sm">
+        <aside className="w-64 lg:w-72 shrink-0 flex flex-col border-r-2 border-border bg-card">
           <div className="px-6 pt-8 pb-6 border-b-2 border-dashed border-border/30">
             <div className="washi-tape text-[11px] font-extrabold tracking-widest px-3 py-1 inline-block mb-4 -rotate-1">부산대학교</div>
             <div className="flex items-center gap-3">
@@ -693,7 +848,7 @@ function App() {
               <h1 className="font-pixel text-3xl font-bold text-foreground">PNUtify</h1>
             </div>
             <p className="text-xs font-bold text-muted-foreground mt-3">{formatDate(now, { weekday: "long" })}</p>
-            <p className="font-pixel text-2xl font-bold text-primary">{formatDate(now, { month: "short", day: "numeric" })}</p>
+            <p className="text-2xl font-extrabold tabular-nums text-primary">{formatDate(now, { month: "short", day: "numeric" })}</p>
           </div>
           <nav className="flex-1 px-4 py-6 flex flex-col gap-2" aria-label="Sections">
             {NAV.map(({ id, label, icon: Icon }) => (
@@ -709,11 +864,11 @@ function App() {
                 )}
               >
                 <Icon size={20} />
-                <span className="font-pixel tracking-wide">{label}</span>
+                <span>{label}</span>
                 {badge(id) > 0 && (
                   <span
                     className={cn(
-                      "ml-auto text-[11px] font-extrabold px-1.5 py-0.5 rounded-md border",
+                      "ml-auto text-[11px] font-extrabold tabular-nums px-1.5 py-0.5 rounded-md border",
                       tab === id ? "bg-primary-foreground/20 border-primary-foreground/30" : "bg-primary text-primary-foreground border-border",
                     )}
                   >
@@ -725,11 +880,11 @@ function App() {
           </nav>
           <div className="px-4 py-5 border-t-2 border-dashed border-border/30">
             <button
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => openSettings()}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm border-2 border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
             >
               <Settings size={20} />
-              <span className="font-pixel tracking-wide">Settings & alerts</span>
+              <span>Settings &amp; alerts</span>
             </button>
           </div>
         </aside>
@@ -747,9 +902,13 @@ function App() {
         onMarkRead={markRead}
       />
 
+      {toast && <Toast key={toast.id} message={toast.message} action={toast.action} onAction={toast.onAction} onClose={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
+
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        focusSection={settingsSection}
+        showOwnerSignIn={ownerHint}
         theme={theme}
         setTheme={setTheme}
         alerts={alerts}

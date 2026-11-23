@@ -36,9 +36,9 @@ export const TABS: Tab[] = ['briefing', 'notices', 'tasks', 'calendar'];
 export type Theme = 'pnu' | 'cherry' | 'midnight' | 'autumn' | 'night';
 export const THEMES: { id: Theme; label: string; swatch: string }[] = [
   { id: 'pnu', label: 'PNU Blue', swatch: '#143F90' },
-  { id: 'cherry', label: 'Blossom', swatch: '#D47E9B' },
-  { id: 'midnight', label: 'Twilight', swatch: '#9B7ED4' },
-  { id: 'autumn', label: 'Autumn', swatch: '#D48B68' },
+  { id: 'cherry', label: 'Blossom', swatch: '#B4537A' },
+  { id: 'midnight', label: 'Twilight', swatch: '#7656B8' },
+  { id: 'autumn', label: 'Autumn', swatch: '#A8573A' },
   { id: 'night', label: 'Night', swatch: '#1B2333' },
 ];
 
