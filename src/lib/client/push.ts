@@ -1,7 +1,7 @@
 import type { AlertCategories } from './types';
 import { getDeviceId } from './storage';
 
-export const NO_ALERTS: AlertCategories = { cse: false, international: false, tasks: false, courses: false };
+export const NO_ALERTS: AlertCategories = { cse: false, international: false, pnu: false, tasks: false, courses: false };
 
 export type PushSupport =
   | { ok: true }
@@ -116,7 +116,7 @@ export async function setAlerts(patch: Partial<AlertCategories>): Promise<AlertC
   if (!res.ok) throw new Error('save-failed');
   const data = await res.json();
   const next: AlertCategories = { ...NO_ALERTS, ...(data?.categories ?? {}) };
-  if (!next.cse && !next.international && !next.tasks && !next.courses) await turnOffAll();
+  if (!Object.values(next).some(Boolean)) await turnOffAll();
   return next;
 }
 

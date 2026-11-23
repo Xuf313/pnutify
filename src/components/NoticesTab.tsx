@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bell, BellOff, CheckCheck, Globe, Monitor, Pin, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import { Bell, BellOff, CheckCheck, Pin, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import { BoardIcon } from "./BoardIcon";
 import { cn, EmptyState, Pill } from "./ui";
 import { isNewNotice } from "@/lib/client/notices";
 import { relative } from "@/lib/client/time";
 import type { AlertCategories, Notice, NoticeSource } from "@/lib/client/types";
-import { SOURCE_LABEL } from "@/lib/client/types";
+import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
 
 type Filter = "all" | NoticeSource;
 const PAGE = 20;
@@ -14,6 +15,8 @@ const PAGE = 20;
 type Props = {
   now: number;
   notices: Notice[];
+  /** The boards this device shows (already applied to `notices`). */
+  boards: NoticeSource[];
   readIds: Set<string>;
   loading: boolean;
   error: boolean;
@@ -28,7 +31,9 @@ type Props = {
 };
 
 export function NoticesTab(p: Props) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [chosen, setFilter] = useState<Filter>("all");
+  // A board hidden in Settings can't stay selected here.
+  const filter: Filter = chosen === "all" || p.boards.includes(chosen) ? chosen : "all";
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
@@ -44,13 +49,14 @@ export function NoticesTab(p: Props) {
   }, [p.notices, p.readIds, filter, unreadOnly, query]);
 
   const unreadInView = filtered.filter((n) => !p.readIds.has(n.id));
-  const counts = {
-    all: p.notices.filter((n) => !p.readIds.has(n.id)).length,
-    cse: p.notices.filter((n) => n.source === "cse" && !p.readIds.has(n.id)).length,
-    international: p.notices.filter((n) => n.source === "international" && !p.readIds.has(n.id)).length,
-  };
+  const counts: Record<string, number> = { all: 0 };
+  for (const n of p.notices) {
+    if (p.readIds.has(n.id)) continue;
+    counts.all++;
+    counts[n.source] = (counts[n.source] ?? 0) + 1;
+  }
 
-  const alertOn = filter === "all" ? p.alerts.cse && p.alerts.international : p.alerts[filter];
+  const alertOn = filter === "all" ? p.boards.length > 0 && p.boards.every((b) => p.alerts[b]) : p.alerts[filter];
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -74,8 +80,8 @@ export function NoticesTab(p: Props) {
         )}
       </div>
 
-      <div className="flex gap-2" role="tablist" aria-label="Notice board">
-        {(["all", "cse", "international"] as Filter[]).map((f) => (
+      <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pt-1 pb-1.5" role="tablist" aria-label="Notice board">
+        {(["all", ...p.boards] as Filter[]).map((f) => (
           <button
             key={f}
             role="tab"
@@ -85,15 +91,15 @@ export function NoticesTab(p: Props) {
               setLimit(PAGE);
             }}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-extrabold border-2 transition-all",
+              "flex-1 min-w-fit whitespace-nowrap flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-extrabold border-2 transition-all",
               filter === f
                 ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-0.5"
                 : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted",
             )}
           >
-            {f === "cse" ? <Monitor size={15} /> : f === "international" ? <Globe size={15} /> : null}
-            {f === "all" ? "All" : f === "cse" ? "CSE" : "Intl."}
-            {counts[f] > 0 && <span className="text-[10px] opacity-70">{counts[f]}</span>}
+            {f !== "all" && <BoardIcon source={f} size={15} className="hidden min-[360px]:inline shrink-0" />}
+            {f === "all" ? "All" : boardInfo(f)?.short ?? f}
+            {(counts[f] ?? 0) > 0 && <span className="text-[10px] opacity-70">{counts[f]}</span>}
           </button>
         ))}
       </div>
@@ -164,7 +170,7 @@ export function NoticesTab(p: Props) {
               <li key={n.id} className={cn("cozy-card bg-card flex items-stretch", isRead && "opacity-65 border-dashed shadow-none")}>
                 <button onClick={() => p.onOpenNotice(n.id)} className="flex-1 min-w-0 text-left p-3.5 flex gap-3 items-start">
                   <span className="w-9 h-9 rounded-xl bg-background border-2 border-border flex items-center justify-center shrink-0" aria-hidden>
-                    {n.source === "cse" ? <Monitor size={16} className="text-secondary" /> : <Globe size={16} className="text-primary" />}
+                    <BoardIcon source={n.source} size={16} className={n.source === "cse" ? "text-secondary" : "text-primary"} />
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className={cn("block font-bold text-foreground leading-snug", isRead && "font-semibold")}>{n.title}</span>

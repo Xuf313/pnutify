@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, BookOpen, CircleCheck, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
+import { Bell, BookOpen, CircleCheck, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
 import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
 import { formatDue, relative } from "@/lib/client/time";
 import { fetchAlertStatus, type AlertStatus } from "@/lib/client/owner";
-import { THEMES, type AlertCategories, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
+import { BOARDS, THEMES, type AlertCategories, type NoticeSource, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
+import { BoardIcon } from "./BoardIcon";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -20,6 +21,9 @@ type Props = {
   changeAlerts: (patch: Partial<AlertCategories>) => Promise<AlertCategories>;
   installPrompt: InstallPrompt | null;
   clearInstallPrompt: () => void;
+  /** Boards this device shows. */
+  boards: NoticeSource[];
+  setBoards: (b: NoticeSource[]) => void;
   isOwner: boolean;
   ownerData: OwnerData | null;
   ownerActions: {
@@ -29,11 +33,9 @@ type Props = {
   };
 };
 
-const ALERT_ROWS: { key: keyof AlertCategories; title: string; body: string }[] = [
-  { key: "cse", title: "CSE notices", body: "New posts on the 정보컴퓨터공학부 board" },
-  { key: "international", title: "International notices", body: "New posts on the 국제처 board" },
-  { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" },
-];
+type AlertRow = { key: keyof AlertCategories; title: string; body: string };
+const TASK_ROW: AlertRow = { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" };
+const boardRow = (b: (typeof BOARDS)[number]): AlertRow => ({ key: b.id, title: `${b.label} notices`, body: `New posts on the ${b.name} board` });
 
 const COURSE_ROW = { key: "courses" as const, title: "PLATO & NESPA posts", body: "New course announcements and NESPA notices (owner only)" };
 
@@ -41,8 +43,9 @@ export function SettingsSheet(p: Props) {
   const [busy, setBusy] = useState<keyof AlertCategories | "test" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const support = pushSupport();
-  const anyOn = p.alerts.cse || p.alerts.international || p.alerts.tasks || p.alerts.courses;
-  const rows = p.isOwner ? [...ALERT_ROWS, COURSE_ROW] : ALERT_ROWS;
+  const anyOn = Object.values(p.alerts).some(Boolean);
+  // One switch per board this device shows, then deadlines (and course posts for the owner).
+  const rows: AlertRow[] = [...BOARDS.filter((b) => p.boards.includes(b.id)).map(boardRow), TASK_ROW, ...(p.isOwner ? [COURSE_ROW] : [])];
 
   const toggle = async (key: keyof AlertCategories, value: boolean) => {
     setBusy(key);
@@ -116,6 +119,37 @@ export function SettingsSheet(p: Props) {
               {message}
             </p>
           )}
+        </section>
+
+        {/* ---------- boards ---------- */}
+        <section>
+          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+            <Newspaper size={18} className="text-primary" /> Boards
+          </h3>
+          <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
+          <ul className="flex flex-col divide-y-2 divide-dashed divide-border/20">
+            {BOARDS.map((b) => {
+              const on = p.boards.includes(b.id);
+              return (
+                <li key={b.id} className="flex items-center justify-between gap-4 py-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <BoardIcon source={b.id} size={18} className="text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-foreground">{b.label}</p>
+                      <p className="text-sm text-muted-foreground">{b.name}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    label={`Show ${b.label} notices`}
+                    checked={on}
+                    // Keep at least one board.
+                    disabled={on && p.boards.length === 1}
+                    onChange={(v) => p.setBoards(v ? BOARDS.map((x) => x.id).filter((id) => id === b.id || p.boards.includes(id)) : p.boards.filter((id) => id !== b.id))}
+                  />
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         {/* ---------- PLATO + NESPA (owner devices only) ---------- */}

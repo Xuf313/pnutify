@@ -4,6 +4,7 @@ import {
   checkFirstPages,
   fetchFullTitle,
   mayBeCutOff,
+  withoutCutMarker,
   scrapeAllBoards,
   sortNotices,
   type NoticeSource,
@@ -133,7 +134,7 @@ const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
 
 /** A stored full title still belongs to a notice if it contains the listed (possibly cut) title. */
 function matchesListed(full: string | undefined, listed: string): full is string {
-  return typeof full === 'string' && full.length > 0 && squash(full).includes(squash(listed).slice(0, 30));
+  return typeof full === 'string' && full.length > 0 && squash(full).includes(squash(withoutCutMarker(listed)).slice(0, 30));
 }
 
 /**

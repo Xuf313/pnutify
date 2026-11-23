@@ -27,15 +27,15 @@ vi.mock('../ownerSync', async (importOriginal) => {
 });
 
 // The boards are simulated: each test sets what they return. null = the site is down.
-const boards: Record<NoticeSource, ScrapedNotice[] | null> = { cse: [], international: [] };
+const boards: Record<NoticeSource, ScrapedNotice[] | null> = { cse: [], international: [], pnu: [] };
 vi.mock('../scrapeNotices', async (importOriginal) => {
   const real = await importOriginal<typeof import('../scrapeNotices')>();
   const result = (source: NoticeSource) => ({ source, ok: boards[source] !== null, notices: boards[source] ?? [] });
   return {
     ...real,
-    scrapeAllBoards: vi.fn(async () => [result('cse'), result('international')]),
+    scrapeAllBoards: vi.fn(async () => [result('cse'), result('international'), result('pnu')]),
     checkFirstPages: vi.fn(async () =>
-      (['cse', 'international'] as const).map((source) => ({ source, ok: boards[source] !== null, ids: (boards[source] ?? []).map((n) => n.id) })),
+      (['cse', 'international', 'pnu'] as const).map((source) => ({ source, ok: boards[source] !== null, ids: (boards[source] ?? []).map((n) => n.id) })),
     ),
     fetchFullTitle: vi.fn(async (n: { title: string }) => ({ ok: true, title: `${n.title} (full)` })),
   };
@@ -48,7 +48,7 @@ const send = vi.mocked(webpush.sendNotification);
 let redis: FakeRedis;
 
 function notice(n: number, source: NoticeSource = 'cse', postedAt = T0, title = `Notice ${n}`): ScrapedNotice {
-  const prefix = source === 'cse' ? 'cse' : 'intl';
+  const prefix = source === 'cse' ? 'cse' : source === 'pnu' ? 'pnu' : 'intl';
   return { id: `${prefix}_${n}`, title, date: '2026.11.19', postedAt, source, url: `https://example.pusan.ac.kr/${n}`, pinned: false };
 }
 
@@ -67,6 +67,7 @@ beforeEach(() => {
   setRedisForTesting(redis.asRedis());
   boards.cse = [notice(1), notice(2)];
   boards.international = [notice(10, 'international')];
+  boards.pnu = [notice(30, 'pnu')];
   send.mockReset();
   send.mockResolvedValue({ statusCode: 201, body: '', headers: {} });
   vi.mocked(scrape.scrapeAllBoards).mockClear();
@@ -157,7 +158,7 @@ describe('checking every minute stays cheap', () => {
     redis.kv.set(KEYS.runLock, 'someone-else');
     const { snapshot, changed } = await refreshNotices(T0 + 20 * MIN, { quick: true });
     expect(changed).toBe(false);
-    expect(snapshot.notices).toHaveLength(3);
+    expect(snapshot.notices).toHaveLength(4);
     expect(scrape.scrapeAllBoards).toHaveBeenCalledTimes(1);
   });
 });
@@ -170,7 +171,7 @@ describe('a board that is down', () => {
     const first = await runNotificationCycle(T0 + MIN);
     expect(first.staleSources).toEqual(['international']);
     expect(first.boardsDown).toEqual([]);
-    expect(first.noticeCount).toBe(3);
+    expect(first.noticeCount).toBe(4);
 
     // While it stays down, minute checks don't trigger a full re-read each time.
     vi.mocked(scrape.scrapeAllBoards).mockClear();

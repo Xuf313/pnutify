@@ -2,18 +2,20 @@ import webpush, { type PushSubscription } from 'web-push';
 import { getRedis, KEYS, withLock } from './redis';
 import { BOARD_DOWN_ALERT_MS, refreshNotices, type Notice } from './notices';
 import { OWNER_KEYS, ownerEnabled, type LastPush } from './owner';
+import { BOARDS, type NoticeSource } from './scrapeNotices';
 import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
-/** `courses` (PLATO and NESPA announcements) only ever applies to owner devices. */
-export type Categories = { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
+/** One switch per board, plus deadlines; `courses` (PLATO and NESPA posts) only applies to owner devices. */
+export type Categories = Record<NoticeSource, boolean> & { tasks: boolean; courses: boolean };
 /** Nothing is on until the student turns it on. */
-export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, tasks: false, courses: false };
+export const DEFAULT_CATEGORIES: Categories = { cse: false, international: false, pnu: false, tasks: false, courses: false };
 
 export function normalizeCategories(value: unknown): Categories {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   return {
     cse: v.cse === true,
     international: v.international === true,
+    pnu: v.pnu === true,
     tasks: v.tasks === true,
     courses: v.courses === true,
   };
@@ -225,7 +227,7 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         for (const n of mine) {
           outgoing.push({
             payload: {
-              title: n.source === 'cse' ? 'New CSE notice' : 'New International notice',
+              title: `New ${BOARDS.find((b) => b.source === n.source)?.label ?? 'PNU'} notice`,
               body: n.title,
               url: noticeTarget(n),
               tag: `notice-${n.id}`,

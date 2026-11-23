@@ -179,3 +179,26 @@ describe('scrapeBoard', () => {
     await expect(scrapeFirstPage(INTL, NOW)).resolves.toMatchObject({ ok: false });
   });
 });
+
+describe('the university-wide PNU board (a different CMS)', () => {
+  const PNU = BOARDS.find((b) => b.source === 'pnu')!;
+  const { notices } = parseBoardPage(fixture('pnu-list'), PNU);
+
+  it('reads the list with board_seq ids and links that resolve against the list page', () => {
+    expect(notices.length).toBeGreaterThanOrEqual(10);
+    for (const n of notices) {
+      expect(n.id).toMatch(/^pnu_\d+$/);
+      expect(n.url).toMatch(/^https:\/\/www\.pusan\.ac\.kr\/kor\/CMS\/Board\/Board\.do\?mCode=MN095&mode=view&mgr_seq=3&board_seq=\d+$/);
+      expect(n.postedAt).not.toBeNull();
+      expect(n.title.length).toBeGreaterThan(3);
+    }
+    expect(notices.some((n) => n.pinned)).toBe(true);
+  });
+
+  it('takes the full title from the attachment icon when the list cuts it with "..."', () => {
+    const n = notices.find((x) => x.id === 'pnu_1512342')!;
+    expect(n.title).toBe('[학생성공개발원 현장실습지원센터] 2026학년도동계 글로벌 현장실무 프로젝트 추가 모집 안내(~11.25)');
+    expect(mayBeCutOff(n)).toBe(false);
+    expect(mayBeCutOff({ source: 'pnu', title: '[학생과] 국가장학금 1차 신청 기간...' })).toBe(true);
+  });
+});

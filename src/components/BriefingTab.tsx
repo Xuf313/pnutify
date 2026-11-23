@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Globe, Monitor, Smartphone, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, Check, ExternalLink, Smartphone, TriangleAlert } from "lucide-react";
 import { cn, Pill } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
 import { isIOS, isStandalone } from "@/lib/client/push";
 import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
-import { SOURCE_LABEL } from "@/lib/client/types";
+import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
+import { BoardIcon } from "./BoardIcon";
 import { isFreshNotice } from "@/lib/client/notices";
 
 const DAY = 86_400_000;
@@ -47,6 +48,8 @@ type Update = {
   text: string;
   at: number;
   url?: string;
+  /** Set for board notices, to show the board's icon. */
+  source?: string;
   open: () => void;
 };
 
@@ -132,9 +135,10 @@ export function BriefingTab(p: Props) {
       title: n.title,
       tag: SOURCE_LABEL[n.source],
       tone: "primary",
-      text: `${n.source === "cse" ? "정보컴퓨터공학부" : "국제처"} board · posted ${n.date}`,
+      text: `${boardInfo(n.source)?.name ?? "PNU"} · posted ${n.date}`,
       at: n.firstSeenAt,
       url: n.url,
+      source: n.source,
       open: () => p.onOpenNotice(n.id),
     }));
     return [...fromPosts, ...fromNotices].sort((a, b) => b.at - a.at).slice(0, 7);
@@ -298,7 +302,7 @@ export function BriefingTab(p: Props) {
                         style={{ ["--tilt" as string]: `${(i % 3) - 1.5}deg` }}
                         aria-label={`Open "${u.title}" on the original site`}
                       >
-                        {u.tag === "CSE" ? <Monitor size={11} /> : u.tag === "International" ? <Globe size={11} /> : <ExternalLink size={11} />}
+                        {u.source ? <BoardIcon source={u.source} size={11} /> : <ExternalLink size={11} />}
                       </a>
                     )}
                   </p>

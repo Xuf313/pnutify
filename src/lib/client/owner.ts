@@ -122,7 +122,7 @@ export type AlertStatus = {
     subscribed: boolean;
     inSendList: boolean;
     ownerDevice: boolean;
-    categories: { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
+    categories: Record<string, boolean>;
     lastPush: { at: number; ok: boolean; status?: number; title: string } | null;
   };
   upcoming: { id: string; title: string; source: 'PLATO' | 'NESPA' | 'Task'; dueAt: number; at24: number; at1: number; sent24: boolean; sent1: boolean }[];

@@ -11,7 +11,7 @@ import { SettingsSheet, type InstallPrompt } from "@/components/SettingsSheet";
 import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
-import { TABS, type AlertCategories, type Notice, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { BOARD_IDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
 import { formatDate } from "@/lib/client/time";
 import { isFreshNotice } from "@/lib/client/notices";
@@ -43,6 +43,10 @@ type Boot = {
    * instead of 100+ unread ones.
    */
   seedReadSince: number | null;
+  /** Boards this device shows. */
+  boards: NoticeSource[];
+  /** Boards whose older notices were already marked read when they first appeared here. */
+  seededBoards: string[];
   tab: Tab;
   noticeId: string | null;
 };
@@ -70,6 +74,9 @@ function boot(): Boot {
   const seed = read<number | "done" | null>(KEYS.readSeed, null);
   const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
   if (seedReadSince !== null) write(KEYS.readSeed, seedReadSince);
+  const storedBoards = read<string[] | null>(KEYS.boards, null);
+  // Before boards could be added, everyone had CSE and International; those are already "seeded".
+  const seededBoards = read<string[] | null>(KEYS.seededBoards, null) ?? (seed === "done" ? ["cse", "international"] : []);
   bootData = {
     theme: loadTheme(),
     tasks: loadTasks(),
@@ -77,6 +84,8 @@ function boot(): Boot {
     cache: cache && Array.isArray(cache.notices) ? { updatedAt: cache.updatedAt || 0, notices: dedupe(cache.notices) } : null,
     sinceTs,
     seedReadSince,
+    boards: Array.isArray(storedBoards) ? BOARD_IDS.filter((b) => storedBoards.includes(b)) : BOARD_IDS,
+    seededBoards,
     tab: link.tab ?? "briefing",
     noticeId: link.noticeId,
   };
@@ -116,6 +125,12 @@ function App() {
   const [external, setExternal] = useState<SyncState["external"]>(() => read(KEYS.external, {}));
   const [deletedTasks, setDeletedTasks] = useState<Record<string, number>>(() => read(KEYS.deletedTasks, {}));
   const seedReadSince = useRef<number | null>(boot().seedReadSince);
+  const seededBoards = useRef(new Set(boot().seededBoards));
+  const [boards, setBoardsState] = useState<NoticeSource[]>(() => boot().boards);
+  const setBoards = useCallback((next: NoticeSource[]) => {
+    setBoardsState(next);
+    write(KEYS.boards, next);
+  }, []);
 
   // ---------- deep links: ?tab=notices&notice=<id> (used by push notifications) ----------
   const applyUrl = useCallback((href: string) => {
@@ -145,7 +160,18 @@ function App() {
           setReadIds((prev) => new Set([...prev, ...old]));
           seedReadSince.current = null;
           write(KEYS.readSeed, "done");
+          for (const n of list) seededBoards.current.add(n.source);
         }
+        // A board that's new to this device (e.g. one added in an update) starts with its older
+        // notices marked read, so it doesn't arrive with 100+ unread.
+        const fresh = [...new Set(list.map((n) => n.source))].filter((s) => !seededBoards.current.has(s));
+        if (fresh.length > 0 && seedReadSince.current === null) {
+          const t = Date.now();
+          const old = list.filter((n) => fresh.includes(n.source) && !isFreshNotice(n, t, t - 2 * 86_400_000)).map((n) => n.id);
+          setReadIds((prev) => new Set([...prev, ...old]));
+          fresh.forEach((s) => seededBoards.current.add(s));
+        }
+        write(KEYS.seededBoards, [...seededBoards.current]);
       }
     } catch {
       setNoticeError(true);
@@ -407,7 +433,9 @@ function App() {
 
   const openNotice = useCallback((id: string) => setOpenNoticeId(id), []);
   const selectedNotice = openNoticeId ? notices.find((n) => n.id === openNoticeId) ?? null : null;
-  const unreadCount = useMemo(() => notices.filter((n) => !readIds.has(n.id)).length, [notices, readIds]);
+  // Only the boards this device shows count anywhere (lists, Briefing, badges).
+  const shownNotices = useMemo(() => notices.filter((n) => boards.includes(n.source)), [notices, boards]);
+  const unreadCount = useMemo(() => shownNotices.filter((n) => !readIds.has(n.id)).length, [shownNotices, readIds]);
   const pendingCount = useMemo(() => allTasks.filter((t) => t.status === "pending").length, [allTasks]);
 
   const content = (
@@ -416,7 +444,7 @@ function App() {
         <BriefingTab
           now={now}
           sinceTs={sinceTs}
-          notices={notices}
+          notices={shownNotices}
           readIds={readIds}
           tasks={allTasks}
           posts={posts}
@@ -437,7 +465,8 @@ function App() {
       {tab === "notices" && (
         <NoticesTab
           now={now}
-          notices={notices}
+          notices={shownNotices}
+          boards={boards}
           readIds={readIds}
           loading={loadingNotices}
           error={noticeError}
@@ -589,6 +618,8 @@ function App() {
         changeAlerts={changeAlerts}
         installPrompt={installPrompt}
         clearInstallPrompt={() => setInstallPrompt(null)}
+        boards={boards}
+        setBoards={setBoards}
         isOwner={isOwner}
         ownerData={ownerData}
         ownerActions={ownerActions}

@@ -91,28 +91,34 @@ export function sanitizeArticleHtml(html: string, baseUrl: string): string {
 /** Reads a K2Web article page (the CMS behind the PNU boards). */
 export function parseArticle(html: string, pageUrl: string, listingTitle = ''): NoticeArticle {
   const $ = cheerio.load(html);
-  const view = $('.board-view').first();
-  const body = view.find('.txt').first();
+  // K2Web boards (CSE, International) use .board-view; the PNU board uses .board-view-cont.
+  const view = $('.board-view, .board-view-cont').first().parent();
+  const body = view.find('.board-view .txt, .board-view-contents #boardContents, .board-view-contents').first();
 
   const detail = (label: string) => {
     const li = view.find('.detail li').filter((_, el) => $(el).find('span').first().text().trim() === label).first();
-    if (!li.length) return null;
-    const c = li.clone();
-    c.find('span').first().remove();
-    return c.text().replace(/\s+/g, '').trim() || null;
+    if (li.length) {
+      const c = li.clone();
+      c.find('span').first().remove();
+      return c.text().replace(/\s+/g, '').trim() || null;
+    }
+    // PNU board: <span class="txt">작성일자 2026-11-18</span>
+    // Match the whole first word: "작성일" must not match "작성일자".
+    const txt = view.find('.vtitle-winfo .txt').filter((_, el) => $(el).text().trim().split(/\s+/)[0] === label).first().text();
+    return txt ? txt.trim().slice(label.length).replace(/\s+/g, ' ').trim() || null : null;
   };
 
   const attachments = view
-    .find('.attachment a')
+    .find('.attachment a, .board-view-filelist a')
     .toArray()
     .map((a) => ({ name: $(a).text().replace(/\s+/g, ' ').trim(), url: safeUrl($(a).attr('href'), pageUrl) }))
-    .filter((x): x is { name: string; url: string } => Boolean(x.name && x.url && /download\.do/.test(x.url)));
+    .filter((x): x is { name: string; url: string } => Boolean(x.name && x.url && /download(Run)?\.do/.test(x.url)));
 
   return {
     title: extractArticleTitle(html, listingTitle),
     html: body.length ? sanitizeArticleHtml(body.html() ?? '', pageUrl) : '',
     attachments,
     author: detail('작성자'),
-    date: detail('작성일'),
+    date: detail('작성일') ?? detail('작성일자'),
   };
 }

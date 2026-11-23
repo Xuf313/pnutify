@@ -5,13 +5,13 @@ const D = 24 * H;
 
 /** Notices as /api/notices returns them, dated relative to now. */
 export function noticeSnapshot(now = Date.now()) {
-  const n = (id: string, source: 'cse' | 'international', title: string, ageH: number, pinned = false) => ({
+  const n = (id: string, source: 'cse' | 'international' | 'pnu', title: string, ageH: number, pinned = false) => ({
     id,
     title,
     date: new Date(now - ageH * H + 9 * H).toISOString().slice(0, 10).replace(/-/g, '.'),
     postedAt: now - ageH * H,
     source,
-    url: `https://${source === 'cse' ? 'cse' : 'international'}.pusan.ac.kr/bbs/x/1/${id.split('_')[1]}/artclView.do`,
+    url: source === 'pnu' ? `https://www.pusan.ac.kr/kor/CMS/Board/Board.do?mCode=MN095&mode=view&mgr_seq=3&board_seq=${id.split('_')[1]}` : `https://${source}.pusan.ac.kr/bbs/x/1/${id.split('_')[1]}/artclView.do`,
     pinned,
     firstSeenAt: now - ageH * H,
   });
@@ -26,6 +26,8 @@ export function noticeSnapshot(now = Date.now()) {
       n('cse_102', 'cse', '건물 출입 통제 알림', 20),
       n('cse_103', 'cse', 'Old pinned notice about graduation requirements', 24 * 40, true),
       n('intl_202', 'international', 'Visa document review hours', 24 * 10),
+      n('pnu_301', 'pnu', '[학사과] 겨울계절수업 교류 수학 안내', 24 * 5),
+      n('pnu_302', 'pnu', '[학생과] 국가장학금 1차 신청 기간 안내', 24 * 6),
     ],
   };
 }

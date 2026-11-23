@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 
-export type NoticeSource = 'cse' | 'international';
+export type NoticeSource = 'cse' | 'international' | 'pnu';
 
 export type ScrapedNotice = {
   id: string;
@@ -14,18 +14,24 @@ export type ScrapedNotice = {
   pinned: boolean;
 };
 
-type Board = {
+export type Board = {
   source: NoticeSource;
+  /** Short label, e.g. "CSE". */
+  label: string;
+  /** The board's own name, shown under notices. */
+  name: string;
   url: string;
   origin: string;
   idPrefix: string;
-  /** The list cuts titles at this many characters, with no ellipsis and no full copy in the HTML. */
+  /** The list cuts titles at this many characters with no ellipsis (Infinity if it adds "..." instead). */
   titleCut: number;
 };
 
 export const BOARDS: Board[] = [
-  { source: 'cse', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse', titleCut: 50 },
-  { source: 'international', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl', titleCut: 60 },
+  { source: 'cse', label: 'CSE', name: '정보컴퓨터공학부', url: 'https://cse.pusan.ac.kr/cse/14221/subview.do', origin: 'https://cse.pusan.ac.kr', idPrefix: 'cse', titleCut: 50 },
+  { source: 'international', label: 'International', name: '국제처', url: 'https://international.pusan.ac.kr/international/15224/subview.do', origin: 'https://international.pusan.ac.kr', idPrefix: 'intl', titleCut: 60 },
+  // The university-wide board (all departments post here). A different CMS: relative links, board_seq ids, "..." cut-offs.
+  { source: 'pnu', label: 'PNU', name: '부산대학교 공지사항', url: 'https://www.pusan.ac.kr/kor/CMS/Board/Board.do?mCode=MN095', origin: 'https://www.pusan.ac.kr', idPrefix: 'pnu', titleCut: Infinity },
 ];
 
 // Rolling window instead of a hard-coded semester date, so the app keeps
@@ -79,7 +85,7 @@ export function articleIdFromUrl(url: string): string | null {
     const inner = decoded?.match(/\/(\d+)\/(\d+)\/artclView\.do/);
     if (inner) return inner[2];
   }
-  const param = url.match(/[?&](?:articleNo|artclNo|nttSn|seq)=(\d+)/i);
+  const param = url.match(/[?&](?:articleNo|artclNo|nttSn|board_seq|seq)=(\d+)/i);
   return param ? param[1] : null;
 }
 
@@ -113,6 +119,9 @@ export function parseBoardPage(html: string, board: Board): { notices: ScrapedNo
     const attrTitle = link.attr('title') || '';
     let rawTitle = link.find('strong').text() || link.text();
     if (attrTitle.length > rawTitle.length) rawTitle = attrTitle;
+    // The PNU board cuts titles with "..." but repeats the full one in the attachment icon: "'<title>'의 첨부파일".
+    const iconTitle = ($row.find('img[alt$="의 첨부파일"]').attr('alt') || '').match(/^'(.+)'의 첨부파일$/)?.[1] ?? '';
+    if (iconTitle.length > rawTitle.trim().length) rawTitle = iconTitle;
     const title = cleanTitle(rawTitle);
 
     let dateText = $row.find('td.td-date, td.date, td.b-date, .b-date').first().text().trim();
@@ -135,7 +144,8 @@ export function parseBoardPage(html: string, board: Board): { notices: ScrapedNo
 
     let absolute: string;
     try {
-      absolute = new URL(href, board.origin).toString();
+      // Relative to the list page: the PNU board links with "?mCode=...&board_seq=...".
+      absolute = new URL(href, board.url).toString();
     } catch {
       return;
     }
@@ -286,15 +296,22 @@ export async function checkFirstPages(now = Date.now()): Promise<FirstPageResult
  */
 export function mayBeCutOff(n: Pick<ScrapedNotice, 'title' | 'source'>): boolean {
   const board = BOARDS.find((b) => b.source === n.source);
-  return board !== undefined && n.title.length >= board.titleCut - 1;
+  return board !== undefined && (n.title.length >= board.titleCut - 1 || /(\.\.\.|…)$/.test(n.title));
 }
+
+/** A listed title without a trailing "..." cut marker, for comparing with the full one. */
+export const withoutCutMarker = (t: string) => t.replace(/\s*(\.\.\.|…)$/, '');
 
 /** Full title from an article page, or null. Prefers the untagged hidden copy, which matches the list style. */
 export function extractArticleTitle(html: string, listingTitle = ''): string | null {
   const $ = cheerio.load(html);
   const hidden = ($('#artclViewTitle').attr('value') || '').replace(/\s+/g, ' ').trim();
   const heading = $('.board-view .title strong, .view.viewCont .title strong').first().text().replace(/\s+/g, ' ').trim();
-  let title = hidden || heading || null;
+  // The PNU board's article title (an icon image sits inside it).
+  const pnuTitle = $('.board-view-title h4.vtitle').first().clone();
+  pnuTitle.find('img').remove();
+  const vtitle = pnuTitle.text().replace(/\s+/g, ' ').trim();
+  let title = hidden || heading || vtitle || null;
 
   if (!title && listingTitle) {
     const prefix = listingTitle.replace(/[.…]+$/, '').trim().slice(0, 15);
@@ -320,7 +337,7 @@ export async function fetchFullTitle(n: Pick<ScrapedNotice, 'title' | 'url'>): P
   const full = extractArticleTitle(html, n.title);
   const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
   // The article title must contain the listed one; otherwise keep what we had.
-  if (full && full.length > n.title.length && squash(full).includes(squash(n.title).slice(0, 30))) {
+  if (full && full.length > withoutCutMarker(n.title).length && squash(full).includes(squash(withoutCutMarker(n.title)).slice(0, 30))) {
     return { ok: true, title: full };
   }
   return { ok: true, title: n.title };

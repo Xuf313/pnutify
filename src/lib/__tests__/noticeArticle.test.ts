@@ -57,3 +57,18 @@ describe('parseArticle on real pages', () => {
     expect(a.attachments).toEqual([]);
   });
 });
+
+describe('parseArticle on the university-wide PNU board', () => {
+  it('reads the title, author, date, body and attachments', () => {
+    const url = 'https://www.pusan.ac.kr/kor/CMS/Board/Board.do?mCode=MN095&mode=view&mgr_seq=3&board_seq=1512320';
+    const a = parseArticle(fixture('pnu-article'), url);
+    expect(a.title).toBe('[학생과]★2027학년도 1학기 국가장학금 1차 신청 기간 안내★');
+    expect(a.date).toBe('2026-11-18');
+    expect(a.author).toBe('[학생과]');
+    expect(a.html).toContain('27학번 신입생');
+    expect(a.html).not.toMatch(/style=|class=|<script/);
+    expect(a.attachments.length).toBeGreaterThanOrEqual(2);
+    expect(a.attachments[0].url).toMatch(/^https:\/\/www\.pusan\.ac\.kr\/kor\/ajx_json\/UploadMgr\/downloadRun\.do\?qcode=/);
+    expect(a.attachments[1].name).toContain('붙임2. 2027년 지방 국립대학 전액 장학금 안내.pdf');
+  });
+});
