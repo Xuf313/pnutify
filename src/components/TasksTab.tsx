@@ -84,7 +84,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
       ) : (
         groups.map((g) => (
           <section key={g.label}>
-            <h2 className={cn("pl-[42px] font-display text-lg font-bold mb-1", g.label === "Overdue" ? "text-signal" : "text-foreground")}>{g.label}</h2>
+            <h2 className={cn("font-display text-lg font-bold mb-1", g.label === "Overdue" ? "text-signal" : "text-foreground")}>{g.label}</h2>
             <ul className="stops">
               {g.items.map((t) =>
                 editingId === t.id ? (
@@ -112,7 +112,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
 
       {completed.length > 0 && (
         <section className="mt-2">
-          <div className="flex items-center justify-between mb-1 pl-[42px]">
+          <div className="flex items-center justify-between mb-1">
             <h2 className="font-display text-lg font-bold text-muted-foreground">Done ({completed.length})</h2>
             <button onClick={() => actions.clearCompleted(completed.map((t) => t.id))} className="text-sm font-semibold text-primary hover:underline">
               Clear done
@@ -140,7 +140,7 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
         aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
         className="stop__marker"
       >
-        {done && <Check size={13} strokeWidth={3.5} />}
+        {done && <Check size={12} strokeWidth={3.5} />}
       </button>
       <div className="flex-1 min-w-0">
         <p className={cn("font-semibold text-foreground leading-snug", done && "line-through text-muted-foreground font-normal")}>{task.title}</p>

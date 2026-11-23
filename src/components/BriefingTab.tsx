@@ -432,7 +432,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
   return (
     <li className={cn("stop", done && "is-done")}>
       <button onClick={() => onToggle(task.id)} aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`} className="stop__marker">
-        {done && <Check size={13} strokeWidth={3.5} />}
+        {done && <Check size={12} strokeWidth={3.5} />}
       </button>
       <div className="flex-1 min-w-0">
         <p className={cn("font-semibold text-foreground leading-snug truncate", done && "line-through text-muted-foreground font-normal")}>{task.title}</p>
