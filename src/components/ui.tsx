@@ -13,13 +13,14 @@ export function AppLogo({ size = 40, className = "" }: { size?: number; classNam
   return (
     <div
       className={cn(
-        "rounded-2xl bg-primary text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--color-border)] flex items-center justify-center shrink-0",
+        // A station marker: the school colour, ringed in the line's colour.
+        "rounded-full bg-primary text-primary-foreground ring-2 ring-signal ring-offset-2 ring-offset-background flex items-center justify-center shrink-0",
         className,
       )}
       style={{ width: size, height: size }}
       aria-hidden
     >
-      <GraduationCap size={Math.round(size * 0.55)} strokeWidth={2.5} />
+      <GraduationCap size={Math.round(size * 0.52)} strokeWidth={2.2} />
     </div>
   );
 }
@@ -27,7 +28,7 @@ export function AppLogo({ size = 40, className = "" }: { size?: number; classNam
 export function SectionTitle({ icon, children, action }: { icon?: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 mb-3">
-      <h2 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground">
+      <h2 className="flex items-center gap-2 font-pixel text-xl font-bold text-foreground">
         {icon && <span className="text-primary">{icon}</span>}
         {children}
       </h2>
@@ -38,7 +39,7 @@ export function SectionTitle({ icon, children, action }: { icon?: ReactNode; chi
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="cozy-card p-6 text-center bg-card border-dashed flex flex-col items-center gap-2">
+    <div className="rounded-[14px] border border-border p-6 text-center flex flex-col items-center gap-2">
       <p className="font-pixel font-bold text-foreground">{title}</p>
       {children && <div className="text-sm text-muted-foreground">{children}</div>}
     </div>
@@ -49,11 +50,11 @@ export function Pill({ children, tone = "muted", className }: { children: ReactN
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-md border-2",
-        tone === "muted" && "bg-muted text-muted-foreground border-transparent",
-        tone === "primary" && "bg-primary text-primary-foreground border-border",
-        tone === "secondary" && "bg-secondary text-secondary-foreground border-border",
-        tone === "danger" && "bg-[#E5484D] text-white border-border",
+        "inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
+        tone === "muted" && "bg-muted text-muted-foreground",
+        tone === "primary" && "bg-accent text-accent-foreground",
+        tone === "secondary" && "bg-secondary/12 text-secondary",
+        tone === "danger" && "bg-signal text-signal-foreground",
         className,
       )}
     >
@@ -72,14 +73,14 @@ export function Switch({ checked, onChange, disabled, label }: { checked: boolea
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative w-12 h-7 rounded-full border-2 border-border transition-colors shrink-0 disabled:opacity-50",
-        checked ? "bg-primary" : "bg-muted",
+        "relative w-11 h-[26px] rounded-full transition-colors shrink-0 disabled:opacity-50",
+        checked ? "bg-primary" : "bg-foreground/15",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-card border-2 border-border transition-transform",
-          checked && "translate-x-5",
+          "absolute top-[3px] left-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-transform",
+          checked && "translate-x-[18px]",
         )}
       />
     </button>
@@ -104,16 +105,17 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sheet-backdrop" role="dialog" aria-modal="true" aria-label={title}>
-      <button className="absolute inset-0 bg-foreground/40 backdrop-blur-sm cursor-default" aria-label="Close" onClick={onClose} />
+      <button className="absolute inset-0 bg-[#0b1220]/45 cursor-default" aria-label="Close" onClick={onClose} />
       <div
         ref={panel}
         tabIndex={-1}
-        className="sheet-panel relative cozy-card bg-card w-full sm:max-w-lg max-h-[88dvh] overflow-y-auto rounded-b-none sm:rounded-xl p-5 sm:p-6 outline-none"
+        className="sheet-panel relative bg-card w-full sm:max-w-lg max-h-[88dvh] overflow-y-auto rounded-t-[20px] sm:rounded-[20px] p-5 sm:p-7 outline-none shadow-2xl"
         style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
       >
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <h2 className="font-pixel text-xl font-bold text-foreground leading-snug">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg border-2 border-transparent hover:border-border text-muted-foreground hover:text-foreground" aria-label="Close">
+        <div className="sm:hidden mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-foreground/15" aria-hidden />
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <h2 className="font-pixel text-2xl font-bold text-foreground leading-snug">{title}</h2>
+          <button onClick={onClose} className="p-1.5 -mr-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Close">
             <X size={20} />
           </button>
         </div>

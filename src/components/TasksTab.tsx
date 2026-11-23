@@ -46,18 +46,18 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="font-pixel text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-sm font-bold text-muted-foreground">{pending.length} to do · {synced ? "synced across your devices" : "saved on this device"}</p>
+          <p className="text-sm text-muted-foreground mt-1">{pending.length} to do · {synced ? "synced across your devices" : "saved on this device"}</p>
         </div>
         <button
           onClick={() => setAdding((v) => !v)}
-          className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-3 py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+          className="cozy-btn bg-primary text-primary-foreground font-semibold text-sm px-3.5 py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap"
           aria-expanded={adding}
         >
           {adding ? <X size={18} /> : <Plus size={18} />} {adding ? "Close" : "Add"}
         </button>
       </div>
 
-      <button onClick={openSettings} className="self-start text-left text-sm font-bold flex items-start gap-1.5 text-muted-foreground hover:text-foreground">
+      <button onClick={openSettings} className="self-start text-left text-sm flex items-start gap-1.5 text-muted-foreground hover:text-foreground">
         {alerts.tasks ? <Bell size={15} className="text-primary shrink-0 mt-0.5" /> : <BellOff size={15} className="shrink-0 mt-0.5" />}
         {alerts.tasks ? "Reminders on: 24 hours and 1 hour before each deadline" : "Reminders off. Turn them on in Settings."}
       </button>
@@ -77,17 +77,15 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
 
       {pending.length === 0 && !adding ? (
         <EmptyState title="Nothing to do">
-          <button onClick={() => setAdding(true)} className="font-bold text-primary hover:underline">
+          <button onClick={() => setAdding(true)} className="font-semibold text-primary hover:underline">
             Add your first assignment, exam or reminder.
           </button>
         </EmptyState>
       ) : (
         groups.map((g) => (
           <section key={g.label}>
-            <h2 className={cn("font-pixel text-sm font-bold uppercase tracking-wider mb-2", g.label === "Overdue" ? "text-[#E5484D]" : "text-muted-foreground")}>
-              {g.label}
-            </h2>
-            <ul className="flex flex-col gap-2.5">
+            <h2 className={cn("pl-[42px] font-display text-lg font-bold mb-1", g.label === "Overdue" ? "text-signal" : "text-foreground")}>{g.label}</h2>
+            <ul className="stops">
               {g.items.map((t) =>
                 editingId === t.id ? (
                   <li key={t.id}>
@@ -114,13 +112,13 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
 
       {completed.length > 0 && (
         <section className="mt-2">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-pixel text-sm font-bold uppercase tracking-wider text-muted-foreground">Done ({completed.length})</h2>
-            <button onClick={() => actions.clearCompleted(completed.map((t) => t.id))} className="text-sm font-bold text-primary hover:underline">
+          <div className="flex items-center justify-between mb-1 pl-[42px]">
+            <h2 className="font-display text-lg font-bold text-muted-foreground">Done ({completed.length})</h2>
+            <button onClick={() => actions.clearCompleted(completed.map((t) => t.id))} className="text-sm font-semibold text-primary hover:underline">
               Clear done
             </button>
           </div>
-          <ul className="flex flex-col gap-2">
+          <ul className="stops is-passed">
             {completed.slice(0, 15).map((t) => (
               <TaskItem key={t.id} task={t} now={now} onToggle={actions.toggle} onDelete={() => actions.remove(t.id)} />
             ))}
@@ -136,20 +134,17 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
   const overdue = !done && task.dueDate < now;
   const soon = !done && !overdue && task.dueDate - now < DAY;
   return (
-    <li className={cn("cozy-card bg-card p-3 flex items-center gap-3", done && "opacity-60 border-dashed shadow-none")}>
+    <li className={cn("stop", done && "is-done", overdue && "is-overdue")}>
       <button
         onClick={() => onToggle(task.id)}
         aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
-        className={cn(
-          "w-7 h-7 rounded-lg border-2 border-border flex items-center justify-center shrink-0",
-          done ? "bg-secondary text-secondary-foreground" : "bg-background hover:bg-primary/15",
-        )}
+        className="stop__marker"
       >
-        {done && <Check size={16} strokeWidth={3.5} />}
+        {done && <Check size={13} strokeWidth={3.5} />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={cn("font-bold text-foreground leading-snug", done && "line-through")}>{task.title}</p>
-        <p className="text-xs font-bold text-muted-foreground mt-0.5">
+        <p className={cn("font-semibold text-foreground leading-snug", done && "line-through text-muted-foreground font-normal")}>{task.title}</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">
           {isExternal(task) ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
           {task.course && task.course !== "General" && task.course !== "NESPA" ? `${task.course} · ` : ""}
           {formatDue(task.dueDate, now)}
@@ -174,7 +169,7 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
                 <Pencil size={16} />
               </button>
             )}
-            <button onClick={onDelete} className="p-1.5 rounded-md text-muted-foreground hover:text-[#E5484D] hover:bg-muted" aria-label={`Delete "${task.title}"`}>
+            <button onClick={onDelete} className="p-1.5 rounded-md text-muted-foreground hover:text-signal hover:bg-muted" aria-label={`Delete "${task.title}"`}>
               <Trash2 size={16} />
             </button>
           </>
@@ -217,27 +212,27 @@ function TaskForm({
         if (!title.trim() || Number.isNaN(due)) return;
         onSubmit({ title: title.trim().slice(0, 200), course: course.trim().slice(0, 80) || "General", dueDate: due });
       }}
-      className="cozy-card bg-card p-4 border-dashed flex flex-col gap-3"
+      className="rounded-[16px] border border-border bg-card p-4 flex flex-col gap-3"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">What&apos;s due</span>
+        <span className="text-xs font-semibold text-muted-foreground">What&apos;s due</span>
         <input
           autoFocus
           required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Data Structures HW 5"
-          className="bg-background border-2 border-border rounded-lg px-3 py-2 font-bold focus:outline-none focus:border-primary"
+          className="bg-background border border-border rounded-[10px] px-3 py-2 font-semibold focus:outline-none focus:border-primary"
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Course (optional)</span>
+        <span className="text-xs font-semibold text-muted-foreground">Course (optional)</span>
         <input
           value={course}
           onChange={(e) => setCourse(e.target.value)}
           list="course-options"
           placeholder="e.g. 자료구조"
-          className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-primary"
+          className="bg-background border border-border rounded-[10px] px-3 py-2 text-sm font-semibold focus:outline-none focus:border-primary"
         />
         <datalist id="course-options">
           {courses.map((c) => (
@@ -247,17 +242,17 @@ function TaskForm({
       </label>
       <div className="flex flex-wrap gap-2 items-end">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Due (KST)</span>
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} required className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
+          <span className="text-xs font-semibold text-muted-foreground">Due (KST)</span>
+          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} required className="bg-background border border-border rounded-[10px] px-3 py-2 text-sm font-semibold text-foreground" />
         </label>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Due time" className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Due time" className="bg-background border border-border rounded-[10px] px-3 py-2 text-sm font-semibold text-foreground" />
         <div className="flex gap-1.5">
           {quick.map((q) => (
             <button
               key={q.label}
               type="button"
               onClick={() => setDay(q.day)}
-              className={cn("px-2.5 py-1.5 rounded-lg border-2 text-xs font-bold", day === q.day ? "bg-foreground text-background border-foreground" : "border-border/40 text-muted-foreground")}
+              className={cn("px-2.5 py-1.5 rounded-full border text-xs font-semibold", day === q.day ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground")}
             >
               {q.label}
             </button>
@@ -265,10 +260,10 @@ function TaskForm({
         </div>
       </div>
       <div className="flex gap-2 justify-end">
-        <button type="button" onClick={onCancel} className="px-3 py-2 font-bold text-sm text-muted-foreground">
+        <button type="button" onClick={onCancel} className="px-3 py-2 font-semibold text-sm text-muted-foreground">
           Cancel
         </button>
-        <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-extrabold px-4 py-2 text-sm">
+        <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-semibold px-4 py-2 text-sm">
           {submitLabel}
         </button>
       </div>

@@ -43,8 +43,8 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
 
   return (
     <div className="flex flex-col gap-5 pb-4">
-      <div className="flex items-center justify-between">
-        <h1 className="font-pixel text-3xl font-bold text-foreground">{formatDate(fromKst(`${month}-15`, "12:00"), { month: "long", year: "numeric" })}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h1 className="font-pixel text-[1.6rem] sm:text-3xl font-bold text-foreground whitespace-nowrap">{formatDate(fromKst(`${month}-15`, "12:00"), { month: "long", year: "numeric" })}</h1>
         <div className="flex gap-1.5">
           <button onClick={() => shift(-1)} className="cozy-btn bg-card p-1.5" aria-label="Previous month">
             <ChevronLeft size={18} />
@@ -54,7 +54,7 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
               setMonth(today.slice(0, 7));
               setSelected(today);
             }}
-            className="cozy-btn bg-card px-2.5 text-xs font-extrabold"
+            className="cozy-btn bg-card px-2.5 text-xs font-semibold whitespace-nowrap"
           >
             Today
           </button>
@@ -64,10 +64,10 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
         </div>
       </div>
 
-      <div className="cozy-card bg-card p-3">
+      <div className="rounded-[16px] border border-border bg-card p-3">
         <div className="grid grid-cols-7 gap-1 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-            <div key={d} className="text-center text-[11px] font-extrabold text-muted-foreground">
+            <div key={d} className="text-center text-[11px] font-semibold text-muted-foreground">
               {d}
             </div>
           ))}
@@ -85,16 +85,16 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
                 aria-pressed={isSel}
                 aria-label={`${day}${open ? `, ${open} due` : ""}`}
                 className={cn(
-                  "h-12 rounded-lg border-2 flex flex-col items-center pt-1 transition-colors",
-                  isSel ? "bg-foreground text-background border-foreground" : "bg-background border-transparent hover:border-border/40",
-                  day === today && !isSel && "border-primary text-primary",
+                  "h-12 rounded-[10px] flex flex-col items-center pt-1.5 transition-colors",
+                  isSel ? "bg-foreground text-background" : "hover:bg-muted",
+                  day === today && !isSel && "ring-[1.5px] ring-inset ring-foreground",
                 )}
               >
-                <span className="font-pixel text-sm font-bold">{Number(day.slice(8))}</span>
+                <span className="text-sm font-medium tabular-nums">{Number(day.slice(8))}</span>
                 {list.length > 0 && (
                   <span className="flex gap-0.5 mt-auto mb-1">
                     {list.slice(0, 3).map((t) => (
-                      <span key={t.id} className={cn("w-1.5 h-1.5 rounded-full", t.status === "completed" ? "bg-muted-foreground/40" : isSel ? "bg-background" : "bg-primary")} />
+                      <span key={t.id} className={cn("w-1.5 h-1.5 rounded-full", t.status === "completed" ? "bg-muted-foreground/40" : isSel ? "bg-background" : "bg-signal")} />
                     ))}
                   </span>
                 )}
@@ -108,12 +108,12 @@ export function CalendarTab({ now, tasks, onToggleTask, goTo }: Props) {
         <h2 className="font-pixel text-lg font-bold mb-3 text-foreground">{formatDate(fromKst(selected, "12:00"), { weekday: "long", month: "long", day: "numeric" })}</h2>
         {dayTasks.length === 0 ? (
           <EmptyState title="Nothing due">
-            <button onClick={() => goTo("tasks")} className="font-bold text-primary hover:underline">
+            <button onClick={() => goTo("tasks")} className="font-semibold text-primary hover:underline">
               Add a task
             </button>
           </EmptyState>
         ) : (
-          <ul className="flex flex-col gap-2.5">
+          <ul className="stops">
             {dayTasks.map((t) => (
               <TaskRow key={t.id} task={t} now={now} onToggle={onToggleTask} />
             ))}

@@ -72,7 +72,7 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <Pill tone={notice.source === "cse" ? "secondary" : "primary"}>{site}</Pill>
         {notice.pinned && <Pill>Pinned</Pill>}
-        <span className="text-sm font-bold text-muted-foreground">
+        <span className="text-sm font-semibold text-muted-foreground">
           Posted {article?.date ?? notice.date}
           {article?.author ? ` · ${article.author}` : ""}
         </span>
@@ -95,11 +95,11 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
           )}
           {article.attachments.length > 0 && (
             <div className="mb-5">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Attachments</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Attachments</p>
               <ul className="flex flex-col gap-1.5">
                 {article.attachments.map((a) => (
                   <li key={a.url}>
-                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-bold text-primary hover:underline">
+                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-semibold text-primary hover:underline">
                       <Paperclip size={15} className="shrink-0 mt-0.5" /> <span className="break-all">{a.name}</span>
                     </a>
                   </li>
@@ -109,15 +109,15 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
           )}
         </>
       ) : (
-        <p className="text-sm font-bold text-muted-foreground mb-5">Couldn&apos;t load this notice here right now. You can still read it on the {site} site.</p>
+        <p className="text-sm font-semibold text-muted-foreground mb-5">Couldn&apos;t load this notice here right now. You can still read it on the {site} site.</p>
       )}
 
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => onMarkRead([notice.id], !isRead)} className="cozy-btn bg-card font-bold py-2.5 text-sm flex items-center justify-center gap-1.5">
+          <button onClick={() => onMarkRead([notice.id], !isRead)} className="cozy-btn bg-card font-semibold py-2.5 text-sm flex items-center justify-center gap-1.5">
             <CheckCheck size={16} /> {isRead ? "Mark unread" : "Mark read"}
           </button>
-          <button onClick={share} className="cozy-btn bg-card font-bold py-2.5 text-sm flex items-center justify-center gap-1.5">
+          <button onClick={share} className="cozy-btn bg-card font-semibold py-2.5 text-sm flex items-center justify-center gap-1.5">
             <Share2 size={16} /> Share
           </button>
         </div>
@@ -127,7 +127,7 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => onMarkRead([notice.id])}
-            className="flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-muted-foreground hover:text-primary"
+            className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-muted-foreground hover:text-primary"
           >
             Open on the {site} site <ExternalLink size={14} />
           </a>

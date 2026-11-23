@@ -106,13 +106,13 @@ export function SettingsSheet(p: Props) {
             <Bell size={18} className="text-primary" /> Alerts
           </h3>
           {unsupportedText ? (
-            <p className="text-sm font-bold text-muted-foreground bg-muted rounded-lg p-3">{unsupportedText}</p>
+            <p className="text-sm font-semibold text-muted-foreground bg-muted rounded-lg p-3">{unsupportedText}</p>
           ) : (
-            <ul className="flex flex-col divide-y-2 divide-dashed divide-border/20">
+            <ul className="flex flex-col divide-y divide-border">
               {rows.map((row) => (
                 <li key={row.key} className="flex items-center justify-between gap-4 py-3">
                   <div>
-                    <p className="font-bold text-foreground">{row.title}</p>
+                    <p className="font-semibold text-foreground">{row.title}</p>
                     <p className="text-sm text-muted-foreground">{row.body}</p>
                   </div>
                   <Switch
@@ -126,12 +126,12 @@ export function SettingsSheet(p: Props) {
             </ul>
           )}
           {anyOn && support.ok && (
-            <button onClick={test} disabled={busy !== null} className="mt-2 text-sm font-bold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
+            <button onClick={test} disabled={busy !== null} className="mt-2 text-sm font-semibold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
               <Send size={14} /> Send me a test alert
             </button>
           )}
           {message && (
-            <p role="status" className="mt-2 text-sm font-bold text-foreground">
+            <p role="status" className="mt-2 text-sm font-semibold text-foreground">
               {message}
             </p>
           )}
@@ -169,7 +169,7 @@ export function SettingsSheet(p: Props) {
                 <Download size={16} /> Install PNUtify
               </button>
             ) : isIOS() ? (
-              <ol className="text-sm text-foreground flex flex-col gap-2 list-decimal pl-5 font-bold">
+              <ol className="text-sm text-foreground flex flex-col gap-2 list-decimal pl-5 font-semibold">
                 <li>
                   Open this page in <b>Safari</b>.
                 </li>
@@ -181,7 +181,7 @@ export function SettingsSheet(p: Props) {
                 </li>
               </ol>
             ) : (
-              <p className="text-sm text-muted-foreground font-bold">
+              <p className="text-sm text-muted-foreground font-semibold">
                 In your browser menu, choose <b>Install app</b> or <b>Add to Home screen</b>.
               </p>
             )}
@@ -200,11 +200,11 @@ export function SettingsSheet(p: Props) {
                 onClick={() => p.setTheme(t.id)}
                 aria-pressed={p.theme === t.id}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-xs font-extrabold",
-                  p.theme === t.id ? "border-border bg-card shadow-[2px_2px_0px_var(--color-border)] text-foreground" : "border-border/30 text-muted-foreground",
+                  "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold",
+                  p.theme === t.id ? "border-border bg-card text-foreground" : "border-border text-muted-foreground",
                 )}
               >
-                <span className="w-4 h-4 rounded-full border-2 border-border" style={{ background: t.swatch }} aria-hidden />
+                <span className="w-4 h-4 rounded-full border border-border" style={{ background: t.swatch }} aria-hidden />
                 {t.label}
               </button>
             ))}
@@ -229,13 +229,13 @@ export function SettingsSheet(p: Props) {
               } catch {}
               window.location.reload();
             }}
-            className="mt-3 text-sm font-bold text-[#E5484D] hover:underline"
+            className="mt-3 text-sm font-semibold text-[#E5484D] hover:underline"
           >
             Delete all my data on this device
           </button>
         </section>
 
-        <p className="text-xs text-muted-foreground font-bold flex flex-wrap gap-x-3 gap-y-1 border-t-2 border-dashed border-border/20 pt-4">
+        <p className="text-xs text-muted-foreground font-semibold flex flex-wrap gap-x-3 gap-y-1 border-t-2 border-border pt-4">
           <span>Made by a PNU student for PNU students.</span>
           <a href="https://github.com/Xuf313/pnutify/issues/new" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
             Send feedback <ExternalLink size={11} />
@@ -264,7 +264,7 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
         <BookOpen size={18} className="text-primary" /> PLATO & NESPA
       </h3>
       <p className="text-sm text-muted-foreground mb-2">This device is signed in as the owner. Only owner devices can see this.</p>
-      <ul className="text-sm font-bold text-foreground flex flex-col gap-1.5 mb-3">
+      <ul className="text-sm font-semibold text-foreground flex flex-col gap-1.5 mb-3">
         <li>
           {line(
             "PLATO",
@@ -291,7 +291,7 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
             setNote(throttled ? "Synced less than a minute ago. Try again shortly." : "Synced.");
             setBusy(false);
           }}
-          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 disabled:opacity-50"
+          className="cozy-btn bg-card px-3 py-2 text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
         >
           <RefreshCw size={15} className={busy ? "animate-spin" : ""} /> Sync now
         </button>
@@ -299,13 +299,13 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
           onClick={() => {
             if (window.confirm("Sign this device out of owner mode? PLATO and NESPA will disappear from it.")) actions.lock();
           }}
-          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 text-[#E5484D]"
+          className="cozy-btn bg-card px-3 py-2 text-sm font-semibold flex items-center gap-1.5 text-[#E5484D]"
         >
           <LogOut size={15} /> Sign out this device
         </button>
       </div>
       {note && (
-        <p role="status" className="mt-2 text-sm font-bold">
+        <p role="status" className="mt-2 text-sm font-semibold">
           {note}
         </p>
       )}
@@ -382,11 +382,11 @@ function AlertsCheck() {
     sent ? "sent" : at <= now ? "due at the next check" : `in ${relative(at, now).replace(/^in /, "")}`;
 
   return (
-    <div className="mt-4 border-t-2 border-dashed border-border/20 pt-3">
-      <button onClick={run} disabled={state === "loading"} className="text-sm font-bold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
+    <div className="mt-4 border-t-2 border-border pt-3">
+      <button onClick={run} disabled={state === "loading"} className="text-sm font-semibold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
         <Stethoscope size={15} /> {state === "loading" ? "Checking…" : status ? "Check alerts again" : "Why didn't I get an alert? Check now"}
       </button>
-      {state === "error" && <p className="mt-2 text-sm font-bold text-[#E5484D]">Couldn&apos;t run the check. Try again in a moment.</p>}
+      {state === "error" && <p className="mt-2 text-sm font-semibold text-[#E5484D]">Couldn&apos;t run the check. Try again in a moment.</p>}
       {status && (
         <div className="mt-3 flex flex-col gap-2">
           <ul className="flex flex-col gap-2">
@@ -394,18 +394,18 @@ function AlertsCheck() {
               <li key={l.text} className="flex gap-2 text-sm">
                 {l.ok ? <CircleCheck size={16} className="text-secondary shrink-0 mt-0.5" /> : <TriangleAlert size={16} className="text-[#E5484D] shrink-0 mt-0.5" />}
                 <span>
-                  <span className="font-bold text-foreground">{l.text}</span>
-                  {l.fix && <span className="block text-muted-foreground font-bold">{l.fix}</span>}
+                  <span className="font-semibold text-foreground">{l.text}</span>
+                  {l.fix && <span className="block text-muted-foreground font-semibold">{l.fix}</span>}
                 </span>
               </li>
             ))}
           </ul>
           {status.upcoming.length > 0 && (
             <div className="mt-1">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Next reminders for this device</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Next reminders for this device</p>
               <ul className="flex flex-col gap-1.5 text-sm">
                 {status.upcoming.map((u) => (
-                  <li key={u.id} className="font-bold">
+                  <li key={u.id} className="font-semibold">
                     {u.title} <span className="text-muted-foreground">({u.source}, due {formatDue(u.dueAt, status.now)})</span>
                     <span className="block text-xs text-muted-foreground">
                       24 h reminder: {reminderText(u.sent24, u.at24, status.now)} · 1 h reminder: {reminderText(u.sent1, u.at1, status.now)}
@@ -428,7 +428,7 @@ function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
   const [note, setNote] = useState<string | null>(null);
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="self-start -mt-4 text-xs font-bold text-muted-foreground/70 hover:text-foreground flex items-center gap-1">
+      <button onClick={() => setOpen(true)} className="self-start -mt-4 text-xs font-semibold text-muted-foreground/70 hover:text-foreground flex items-center gap-1">
         <KeyRound size={12} /> Owner sign-in
       </button>
     );
@@ -458,7 +458,7 @@ function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
         }
       }}
     >
-      <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider" htmlFor="owner-key">
+      <label className="text-xs font-semibold text-muted-foreground" htmlFor="owner-key">
         Owner key
       </label>
       <div className="flex gap-2">
@@ -468,14 +468,14 @@ function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
           autoComplete="current-password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          className="flex-1 min-w-0 rounded-xl border-2 border-border bg-background px-3 py-2 text-sm"
+          className="flex-1 min-w-0 rounded-xl border border-border bg-background px-3 py-2 text-sm"
         />
-        <button disabled={busy || key.length === 0} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50">
+        <button disabled={busy || key.length === 0} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-semibold disabled:opacity-50">
           Sign in
         </button>
       </div>
       {note && (
-        <p role="status" className="text-sm font-bold">
+        <p role="status" className="text-sm font-semibold">
           {note}
         </p>
       )}
@@ -509,19 +509,19 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
         <>
           <p className="text-sm text-muted-foreground mb-2">Your tasks and read notices sync with every device that uses this code.</p>
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <code className="rounded-lg bg-muted px-2.5 py-1.5 text-sm font-bold tracking-wider text-foreground" aria-label="Your sync code">
+            <code className="rounded-lg bg-muted px-2.5 py-1.5 text-sm font-semibold text-foreground" aria-label="Your sync code">
               {shown ? code : code.replace(/[^-]/g, "•")}
             </code>
-            <button onClick={() => setShown((v) => !v)} className="text-sm font-bold text-primary hover:underline">
+            <button onClick={() => setShown((v) => !v)} className="text-sm font-semibold text-primary hover:underline">
               {shown ? "Hide" : "Show"}
             </button>
-            <button onClick={copy} className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+            <button onClick={copy} className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
               <Copy size={14} /> Copy
             </button>
           </div>
-          <p className="text-xs font-bold text-muted-foreground mb-3">Anyone with this code can see and change your tasks. Don&apos;t share it with anyone else.</p>
+          <p className="text-xs font-semibold text-muted-foreground mb-3">Anyone with this code can see and change your tasks. Don&apos;t share it with anyone else.</p>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <button onClick={actions.leave} className="text-sm font-bold text-muted-foreground hover:text-foreground">
+            <button onClick={actions.leave} className="text-sm font-semibold text-muted-foreground hover:text-foreground">
               Stop syncing on this device
             </button>
             <button
@@ -529,7 +529,7 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
                 if (!window.confirm("Delete the synced copy? Your other devices will stop syncing too. Each keeps its own data.")) return;
                 await actions.wipe();
               }}
-              className="text-sm font-bold text-[#E5484D] hover:underline"
+              className="text-sm font-semibold text-[#E5484D] hover:underline"
             >
               Delete synced data
             </button>
@@ -554,7 +554,7 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
                 } else setNote(r === "unknown" ? "That code doesn't exist. Check it and try again." : "Couldn't reach the server. Try again.");
               }}
             >
-              <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider" htmlFor="sync-code">
+              <label className="text-xs font-semibold text-muted-foreground" htmlFor="sync-code">
                 Sync code from your other device
               </label>
               <div className="flex gap-2">
@@ -566,9 +566,9 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
                   autoComplete="off"
                   autoCapitalize="characters"
                   spellCheck={false}
-                  className="flex-1 min-w-0 rounded-xl border-2 border-border bg-background px-3 py-2 text-sm font-bold tracking-wider"
+                  className="flex-1 min-w-0 rounded-xl border border-border bg-background px-3 py-2 text-sm font-semibold"
                 />
-                <button disabled={busy || input.replace(/[\s-]/g, "").length < 20} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50">
+                <button disabled={busy || input.replace(/[\s-]/g, "").length < 20} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-semibold disabled:opacity-50">
                   Link
                 </button>
               </div>
@@ -585,11 +585,11 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
                   if (made) setShown(true);
                   else setNote("Couldn't create a code right now. Try again.");
                 }}
-                className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50"
+                className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-semibold disabled:opacity-50"
               >
                 Create a sync code
               </button>
-              <button onClick={() => setEntering(true)} className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold">
+              <button onClick={() => setEntering(true)} className="cozy-btn bg-card px-3 py-2 text-sm font-semibold">
                 Enter a code
               </button>
             </div>
@@ -597,7 +597,7 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
         </>
       )}
       {note && (
-        <p role="status" className="mt-2 text-sm font-bold">
+        <p role="status" className="mt-2 text-sm font-semibold">
           {note}
         </p>
       )}
