@@ -48,7 +48,7 @@ export type SyncState = {
   tasks: Task[];
   deleted: Record<string, number>;
   readIds: string[];
-  external: Record<string, { done: boolean; at: number }>;
+  external: Record<string, { done: boolean; at: number; cleared?: boolean }>;
 };
 
 /** Sends this device's copy; the server merges it with the other devices' and returns the result. */
@@ -71,6 +71,7 @@ export async function pushOwnerState(state: SyncState): Promise<SyncState | null
 export function externalTasks(d: OwnerData | null, external: SyncState['external'], now: number): Task[] {
   if (!d) return [];
   const done = (id: string) => external[id]?.done === true;
+  const cleared = (id: string) => external[id]?.cleared === true;
   const plato: Task[] = (d.plato.data?.deadlines ?? []).map((x) => ({
     id: x.id,
     title: x.title,
@@ -94,7 +95,7 @@ export function externalTasks(d: OwnerData | null, external: SyncState['external
       source: 'nespa',
       url: a.url,
     }));
-  return [...plato, ...nespa];
+  return [...plato, ...nespa].filter((t) => !cleared(t.id));
 }
 
 export function coursePosts(d: OwnerData | null): CoursePost[] {
@@ -110,4 +111,28 @@ export function coursePosts(d: OwnerData | null): CoursePost[] {
   }));
   const nespa: CoursePost[] = (d.nespa.data?.notices ?? []).map((n) => ({ id: n.id, title: n.title, source: 'NESPA', course: 'NESPA', postedAt: n.postedAt, url: n.url }));
   return [...plato, ...nespa].sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0));
+}
+
+export type AlertStatus = {
+  now: number;
+  lastCheckAt: number | null;
+  lastDeadlineCheckAt: number | null;
+  device: {
+    id: string;
+    subscribed: boolean;
+    inSendList: boolean;
+    ownerDevice: boolean;
+    categories: { cse: boolean; international: boolean; tasks: boolean; courses: boolean };
+    lastPush: { at: number; ok: boolean; status?: number; title: string } | null;
+  };
+  upcoming: { id: string; title: string; source: 'PLATO' | 'NESPA' | 'Task'; dueAt: number; at24: number; at1: number; sent24: boolean; sent1: boolean }[];
+};
+
+export async function fetchAlertStatus(): Promise<AlertStatus | null> {
+  try {
+    const res = await fetch(`/api/owner/alerts?deviceId=${encodeURIComponent(getDeviceId())}`, { cache: 'no-store', credentials: 'same-origin' });
+    return res.ok ? ((await res.json()) as AlertStatus) : null;
+  } catch {
+    return null;
+  }
 }

@@ -1,7 +1,7 @@
 import webpush, { type PushSubscription } from 'web-push';
 import { getRedis, KEYS, withLock } from './redis';
 import { BOARD_DOWN_ALERT_MS, refreshNotices, type Notice } from './notices';
-import { OWNER_KEYS, ownerEnabled } from './owner';
+import { OWNER_KEYS, ownerEnabled, type LastPush } from './owner';
 import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
 /** `courses` (PLATO and NESPA announcements) only ever applies to owner devices. */
@@ -293,11 +293,17 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         }
       }
 
+      // Owner devices keep a record of their last push for the Alerts check in Settings.
+      const remember = (r: LastPush) =>
+        isOwner ? redis.set(OWNER_KEYS.lastPush(deviceId), r, { ex: 30 * 86_400 }).catch(() => null) : Promise.resolve(null);
+
       for (const { payload, urgency } of outgoing) {
         try {
           await webpush.sendNotification(subscription as PushSubscription, JSON.stringify(payload), { TTL: 6 * 60 * 60, urgency });
           report.sent++;
+          await remember({ at: now, ok: true, title: payload.title });
         } catch (err) {
+          await remember({ at: now, ok: false, status: statusOf(err), title: payload.title });
           if (isGone(err)) {
             await Promise.all([
               redis.del(KEYS.subscription(deviceId)),

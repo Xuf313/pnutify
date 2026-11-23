@@ -141,7 +141,7 @@ export type OwnerState = {
   deleted: Record<string, number>;
   readIds: string[];
   /** PLATO/NESPA item id → done flag and when it was set. */
-  external: Record<string, { done: boolean; at: number }>;
+  external: Record<string, { done: boolean; at: number; cleared?: boolean }>;
 };
 
 export const EMPTY_STATE: OwnerState = { tasks: [], deleted: {}, readIds: [], external: {} };
@@ -165,7 +165,7 @@ export function normalizeState(v: unknown, now = Date.now()): OwnerState {
   const deleted: Record<string, number> = {};
   for (const [id, at] of Object.entries(s.deleted ?? {})) if (Number(at) > now - TOMBSTONE_MS) deleted[id.slice(0, 80)] = Number(at);
   const external: OwnerState['external'] = {};
-  for (const [id, x] of Object.entries(s.external ?? {})) if (x && typeof x === 'object') external[id.slice(0, 80)] = { done: x.done === true, at: Number(x.at) || 0 };
+  for (const [id, x] of Object.entries(s.external ?? {})) if (x && typeof x === 'object') external[id.slice(0, 80)] = { done: x.done === true, at: Number(x.at) || 0, ...(x.cleared === true ? { cleared: true } : {}) };
   const readIds = (Array.isArray(s.readIds) ? s.readIds : []).filter((x): x is string => typeof x === 'string').slice(-MAX_READ);
   return { tasks, deleted, readIds, external };
 }

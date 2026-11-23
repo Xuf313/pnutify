@@ -246,9 +246,9 @@ body {
 
 .brief-blurb {
   font-family: var(--font-sans); font-weight: 800; font-size: 1.12rem; line-height: 1.4;
-  margin: 1.1rem 0.25rem 0.35rem; color: var(--color-foreground); text-wrap: pretty;
+  margin: 0.6rem 0.25rem 0; color: var(--color-foreground); text-wrap: pretty;
 }
-.brief-caption { font-size: 0.78rem; font-style: italic; color: var(--color-muted-foreground); margin: 0 0.25rem; }
+.brief-caption { font-size: 0.78rem; font-style: italic; color: var(--color-muted-foreground); margin: 0.9rem 0.25rem 0; }
 
 .brief-section { margin-top: 2.4rem; }
 .brief-h2 {
