@@ -164,3 +164,69 @@ test.describe('Boards', () => {
     await expect(dialog.getByRole('button', { name: 'Add 수학과' })).toHaveCount(0);
   });
 });
+
+test.describe('PLATO calendar link', () => {
+  test('a student links PLATO without a password, sees the deadlines in Tasks, and can remove the link', async ({ page }) => {
+    const now = Date.now();
+    const calendar = {
+      checkedAt: now,
+      okAt: now,
+      error: null,
+      deadlines: [
+        { id: 'platocal_aaaaaaaaaaaaaaaa', title: 'OS HW 3', course: '운영체제', dueAt: now + 2 * 86_400_000, firstSeen: now },
+        { id: 'platocal_bbbbbbbbbbbbbbbb', title: 'Quiz 2', course: '자료구조', dueAt: now + 5 * 86_400_000, firstSeen: now },
+      ],
+    };
+    let linked = false;
+    let sentLink = '';
+    await page.route('**/api/plato-calendar**', async (r) => {
+      const method = r.request().method();
+      if (method === 'POST') {
+        sentLink = r.request().postDataJSON().url;
+        linked = true;
+        return r.fulfill({ json: { key: 'k'.repeat(24), calendar } });
+      }
+      if (method === 'DELETE') {
+        linked = false;
+        return r.fulfill({ json: { ok: true } });
+      }
+      // Reading needs the device's key, never the link.
+      expect(r.request().headers()['x-calendar-key']).toBe('k'.repeat(24));
+      return linked ? r.fulfill({ json: { calendar } }) : r.fulfill({ status: 404, json: { error: 'not-linked' } });
+    });
+
+    await page.goto('/?tab=tasks');
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('link', { name: /달력 내보냄 page/ })).toHaveAttribute('href', 'https://plato.pusan.ac.kr/calendar/export.php');
+    const link = 'https://plato.pusan.ac.kr/calendar/export_execute.php?userid=1&authtoken=0123456789abcdef0123456789abcdef01234567&preset_what=all&preset_time=recentupcoming';
+    await dialog.getByLabel('PLATO calendar link').fill(link);
+    await dialog.getByRole('button', { name: 'Link PLATO' }).click();
+    await expect(dialog.getByRole('status')).toHaveText('Linked. Found 2 upcoming deadlines.');
+    expect(sentLink).toBe(link);
+    await expect(dialog.getByText(/Linked · 2 upcoming deadlines/)).toBeVisible();
+    // The link isn't kept in the browser, only the device's key.
+    expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('authtoken');
+    await page.keyboard.press('Escape');
+
+    const main = visible(page, 'main');
+    await expect(main.getByText('OS HW 3')).toBeVisible();
+    await expect(main.getByText(/PLATO · 운영체제/)).toBeVisible();
+    // PLATO items can be ticked off but not edited.
+    await expect(main.getByRole('button', { name: 'Edit "OS HW 3"' })).toHaveCount(0);
+
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    await dialog.getByRole('button', { name: 'Remove link' }).click();
+    await expect(dialog.getByRole('status')).toContainText('Removed');
+    await page.keyboard.press('Escape');
+    await expect(main.getByText('OS HW 3')).toHaveCount(0);
+  });
+
+  test('the owner sees no PLATO link section (owner mode reads PLATO already)', async ({ page }) => {
+    await mockApis(page, { owner: true });
+    await page.addInitScript(() => localStorage.setItem('owner_device_v1', 'true'));
+    await page.goto('/');
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    await expect(page.getByRole('dialog').getByText('PLATO deadlines', { exact: true })).toHaveCount(0);
+  });
+});

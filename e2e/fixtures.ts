@@ -79,6 +79,8 @@ export async function mockApis(page: Page, opts: { owner?: boolean } = {}) {
     }),
   );
   await page.route('**/api/tasks/sync', (r) => r.fulfill({ json: { ok: true } }));
+  // Not linked to a PLATO calendar unless a test says otherwise.
+  await page.route('**/api/plato-calendar**', (r) => r.fulfill({ status: 404, json: { error: 'not-linked' } }));
   await page.route('**/api/push/**', (r) => r.fulfill({ json: { categories: { boards: [], tasks: false, weekly: false, courses: false }, subscribed: false } }));
   if (opts.owner) {
     await page.route('**/api/owner/data', (r) => r.fulfill({ json: ownerData() }));

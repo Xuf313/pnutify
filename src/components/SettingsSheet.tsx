@@ -8,6 +8,8 @@ import { formatDue, relative } from "@/lib/client/time";
 import { fetchAlertStatus, type AlertStatus } from "@/lib/client/owner";
 import { BOARDS, THEMES, type AlertCategories, type BoardInfo, type NoticeSource, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
 import { BoardPicker } from "./BoardPicker";
+import { PlatoCalendarSection, type CalendarActions } from "./PlatoCalendarSection";
+import type { CalendarView } from "@/lib/client/platoCalendar";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -31,6 +33,9 @@ type Props = {
     leave: () => void;
     wipe: () => Promise<void>;
   };
+  /** PLATO calendar link (other students; the owner has PLATO already). */
+  calendar: CalendarView | null;
+  calendarActions: CalendarActions;
   isOwner: boolean;
   ownerData: OwnerData | null;
   ownerActions: {
@@ -145,6 +150,9 @@ export function SettingsSheet(p: Props) {
           <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
           <BoardPicker boards={p.boards} setBoards={p.setBoards} />
         </section>
+
+        {/* ---------- PLATO deadlines from the calendar link (owner devices have PLATO already) ---------- */}
+        {!p.isOwner && <PlatoCalendarSection calendar={p.calendar} actions={p.calendarActions} />}
 
         {/* ---------- sync across devices (owner devices already sync) ---------- */}
         {!p.isOwner && <SyncSection code={p.syncCode} actions={p.syncActions} />}

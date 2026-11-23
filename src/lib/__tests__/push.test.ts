@@ -6,6 +6,7 @@ import { runNotificationCycle } from '../push';
 import { refreshNotices, BOARD_DOWN_ALERT_MS, CORE_FULL_MS, DEPT_FULL_MS, NOTICE_KEYS, VIEWED_QUICK_MS, recordDemand } from '../notices';
 import * as scrape from '../scrapeNotices';
 import { OWNER_KEYS } from '../owner';
+import { linkCalendar } from '../platoCalendar';
 import type { NoticeSource, ScrapedNotice } from '../scrapeNotices';
 
 vi.mock('web-push', () => ({ default: { setVapidDetails: vi.fn(), sendNotification: vi.fn() } }));
@@ -239,6 +240,49 @@ describe('department boards', () => {
     expect((redis.kv.get(NOTICE_KEYS.board('me')) as { notices: unknown[] }).notices).toHaveLength(1);
     expect((redis.kv.get(NOTICE_KEYS.board('cse')) as { notices: unknown[] }).notices).toHaveLength(2);
     expect(Object.keys(redis.hashes.get(NOTICE_KEYS.meta)!).sort()).toEqual(['cse', 'international', 'me']);
+  });
+});
+
+describe('PLATO calendar links', () => {
+  const LINK = 'https://plato.pusan.ac.kr/calendar/export_execute.php?userid=7&authtoken=0123456789abcdef0123456789abcdef01234567';
+  const cal = (events: [string, string, number][]) =>
+    `BEGIN:VCALENDAR\r\n${events
+      .map(([uid, summary, at]) => `BEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:${new Date(at).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}\r\nCATEGORIES:운영체제\r\nEND:VEVENT`)
+      .join('\r\n')}\r\nEND:VCALENDAR`;
+  let served = '';
+
+  beforeEach(() => {
+    process.env.CALENDAR_SECRET = 'k'.repeat(48);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(served, { status: 200 })));
+  });
+  afterEach(() => {
+    delete process.env.CALENDAR_SECRET;
+    vi.unstubAllGlobals();
+  });
+
+  it('alerts about a newly posted assignment, and reminds before it is due, even with the app closed', async () => {
+    addDevice('student1', { tasks: true });
+    served = cal([['1@p', 'HW 1 is due', T0 + 3 * 24 * HOUR]]);
+    await linkCalendar('student1', LINK, T0);
+    await runNotificationCycle(T0);
+    expect(sentTo('student1')).toEqual([]); // what was there when linking isn't "new"
+
+    served = cal([
+      ['1@p', 'HW 1 is due', T0 + 3 * 24 * HOUR],
+      ['2@p', 'HW 2 is due', T0 + 20 * HOUR],
+    ]);
+    await runNotificationCycle(T0 + 16 * MIN);
+    expect(sentTo('student1').map((x) => x.title)).toEqual(['New on PLATO', 'Due in 20 hours']);
+    expect(sentTo('student1')[0].body).toBe('HW 2 · 운영체제 · due Fri 20 Nov, 05:00');
+  });
+
+  it('does nothing for devices with reminders off', async () => {
+    addDevice('student1', { tasks: false });
+    served = cal([]);
+    await linkCalendar('student1', LINK, T0);
+    served = cal([['2@p', 'HW 2 is due', T0 + 20 * HOUR]]);
+    await runNotificationCycle(T0 + 16 * MIN);
+    expect(sentTo('student1')).toEqual([]);
   });
 });
 

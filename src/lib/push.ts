@@ -14,6 +14,7 @@ import { OWNER_KEYS, ownerEnabled, type LastPush } from './owner';
 import { boardBySource } from './scrapeNotices';
 import { isKnownBoard } from './boardList';
 import { weeklyMessage, weeklyWindow } from './weekly';
+import { refreshCalendars, withCalendar, type CalendarRefresh } from './platoCalendar';
 import { getOwnerData, getOwnerState, ownerDataStale, syncOwner, type OwnerData } from './ownerSync';
 
 /**
@@ -70,6 +71,11 @@ function noticeTarget(n: Notice): string {
   return `/?tab=notices&notice=${encodeURIComponent(n.id)}`;
 }
 
+/** "Fri 26 Nov, 23:59" in Korea time. */
+function dueText(t: number): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t);
+}
+
 export function hoursText(ms: number): string {
   const mins = Math.max(1, Math.round(ms / 60000));
   if (mins < 60) return `${mins} min`;
@@ -93,6 +99,8 @@ export type RunReport = {
   staleSources: string[];
   /** Boards that have failed for BOARD_DOWN_ALERT_MS or more: the scraper may need fixing. */
   boardsDown: string[];
+  /** PLATO calendar links: how many were re-read this run, and how many new deadlines they had. */
+  calendars?: { refreshed: number; added: number };
   /** Owner mode: whether PLATO/NESPA were re-read this run, and how many new course posts were found. */
   owner?: { synced: boolean; fresh: number };
 };
@@ -233,6 +241,10 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
     if (fresh.length === 0 && ownerFresh.length === 0 && !checkDeadlines) return report;
     if (checkDeadlines) await redis.set(KEYS.deadlinesCheckedAt, now);
 
+    // PLATO calendar links (students' own deadlines), re-read with the deadline check.
+    const calendars: CalendarRefresh = checkDeadlines ? await refreshCalendars(redis, now) : { current: new Map(), added: new Map(), refreshed: 0 };
+    if (calendars.refreshed > 0) report.calendars = { refreshed: calendars.refreshed, added: [...calendars.added.values()].reduce((n, l) => n + l.length, 0) };
+
     const hasVapid = configureVapid();
     const deviceIds = (await redis.smembers(KEYS.devices).catch(() => [])) as string[];
     report.devices = deviceIds.length;
@@ -248,6 +260,16 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         ownerDeadlines = externalTasks(ownerData, done, now);
       }
     }
+
+    /**
+     * A device's deadlines: its own tasks as the app last uploaded them, brought
+     * up to date with its PLATO calendar link (see withCalendar), plus the
+     * owner's PLATO/NESPA deadlines on owner devices.
+     */
+    const allDeadlines = (rawTasks: unknown, isOwner: boolean, deviceId: string): StoredTask[] => {
+      const own = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
+      return [...withCalendar(own, calendars.current.get(deviceId), now), ...(isOwner ? ownerDeadlines : [])];
+    };
 
     // Sunday evening (KST): the coming week's preview, once per device per week. Checked with deadlines.
     const week = checkDeadlines ? weeklyWindow(now) : null;
@@ -320,9 +342,26 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         }
       }
 
+      // New on PLATO (from the student's calendar link).
+      const newOnPlato = calendars.added.get(deviceId) ?? [];
+      if (categories.tasks && newOnPlato.length > 0) {
+        if (newOnPlato.length > MAX_INDIVIDUAL_NOTICE_PUSHES) {
+          outgoing.push({
+            payload: { title: `${newOnPlato.length} new on PLATO`, body: newOnPlato.slice(0, 3).map((d) => `• ${d.title}`).join('\n'), url: '/?tab=tasks', tag: 'platocal-summary' },
+            urgency: 'high',
+          });
+        } else {
+          for (const d of newOnPlato) {
+            outgoing.push({
+              payload: { title: 'New on PLATO', body: `${d.title} · ${d.course} · due ${dueText(d.dueAt)}`, url: '/?tab=tasks', tag: `new-${d.id}` },
+              urgency: 'high',
+            });
+          }
+        }
+      }
+
       if (checkDeadlines && categories.tasks) {
-        const own = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
-        const tasks = isOwner ? [...own, ...ownerDeadlines] : own;
+        const tasks = allDeadlines(rawTasks, isOwner, deviceId);
         const notified = Array.isArray(rawNotified) ? (rawNotified as string[]) : [];
         const notifiedSet = new Set(notified);
         const newlyNotified: string[] = [];
@@ -361,8 +400,7 @@ export async function runNotificationCycle(now = Date.now()): Promise<RunReport>
         isOwner ? redis.set(OWNER_KEYS.lastPush(deviceId), r, { ex: 30 * 86_400 }).catch(() => null) : Promise.resolve(null);
 
       if (week && categories.weekly && weeklySentFor !== week.weekKey) {
-        const own = Array.isArray(rawTasks) ? (rawTasks as StoredTask[]) : [];
-        const all = (isOwner ? [...own, ...ownerDeadlines] : own).map((t) => ({
+        const all = allDeadlines(rawTasks, isOwner, deviceId).map((t) => ({
           title: t.title,
           dueDate: typeof t.dueDate === 'number' ? t.dueDate : Date.parse(t.dueDate),
         }));

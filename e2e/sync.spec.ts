@@ -40,7 +40,7 @@ test('two devices sync tasks with a sync code', async ({ browser, viewport }) =>
   const laptopSettings = laptop.page.getByRole('dialog');
   await laptopSettings.getByRole('button', { name: 'Enter a code' }).click();
   await laptopSettings.getByLabel('Sync code from your other device').fill(code.toLowerCase());
-  await laptopSettings.getByRole('button', { name: 'Link' }).click();
+  await laptopSettings.getByRole('button', { name: 'Link', exact: true }).click();
   await expect(laptopSettings.getByText('Linked. This device now syncs.')).toBeVisible();
   await laptop.page.keyboard.press('Escape');
 

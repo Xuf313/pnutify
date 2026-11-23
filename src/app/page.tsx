@@ -12,6 +12,7 @@ import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
 import { BOARD_IDS, DEFAULT_BOARDS, MAX_SHOWN_BOARDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { cachedCalendar, calendarTasks, linkCalendar, loadCalendar, unlinkCalendar, type CalendarView } from "@/lib/client/platoCalendar";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
 import { createSyncCode, deleteSyncCode, pushSyncCode, readSyncCode } from "@/lib/client/syncCode";
 import { formatDate } from "@/lib/client/time";
@@ -69,6 +70,9 @@ function shownBoards(stored: unknown): NoticeSource[] {
   const list = BOARD_IDS.filter((b) => stored.includes(b)).slice(0, MAX_SHOWN_BOARDS);
   return list.length > 0 ? list : DEFAULT_BOARDS;
 }
+
+/** PLATO/NESPA items (and PLATO calendar items) are read-only: they can only be ticked off or cleared. */
+const isExternalId = (id: string) => /^(plato_|platocal_|nespa_)/.test(id);
 
 let bootData: Boot | null = null;
 /** Reads everything saved on this device once, on the client only. */
@@ -132,6 +136,8 @@ function App() {
   const [ownerData, setOwnerData] = useState<OwnerData | null>(() => (read<boolean>(KEYS.isOwner, false) ? read<OwnerData | null>(KEYS.ownerData, null) : null));
   const [external, setExternal] = useState<SyncState["external"]>(() => read(KEYS.external, {}));
   const [deletedTasks, setDeletedTasks] = useState<Record<string, number>>(() => read(KEYS.deletedTasks, {}));
+  // PLATO deadlines from the student's calendar link (not on owner devices, which have PLATO already).
+  const [calendar, setCalendar] = useState<CalendarView | null>(() => cachedCalendar());
   const seedReadSince = useRef<number | null>(boot().seedReadSince);
   const seededBoards = useRef(new Set(boot().seededBoards));
   const [boards, setBoardsState] = useState<NoticeSource[]>(() => boot().boards);
@@ -234,6 +240,51 @@ function App() {
       window.removeEventListener("beforeinstallprompt", onInstall);
     };
   }, [applyUrl, fetchNotices]);
+
+  // ---------- PLATO calendar link: re-read on open, then every 10 minutes while visible ----------
+  const lastCalendar = useRef(0);
+  useEffect(() => {
+    if (isOwner) return;
+    const load = async () => {
+      if (Date.now() - lastCalendar.current < 2 * 60_000) return;
+      lastCalendar.current = Date.now();
+      const view = await loadCalendar();
+      if (view !== "offline") setCalendar(view);
+    };
+    load();
+    const tick = setInterval(() => document.visibilityState === "visible" && Date.now() - lastCalendar.current > 10 * 60_000 && load(), 60_000);
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isOwner]);
+
+  const calendarActions = useMemo(
+    () => ({
+      link: async (url: string) => {
+        const r = await linkCalendar(url);
+        if (r.ok) {
+          lastCalendar.current = Date.now();
+          setCalendar(r.calendar);
+        }
+        return r;
+      },
+      refresh: async () => {
+        const view = await loadCalendar(true);
+        if (view === "offline") return false;
+        lastCalendar.current = Date.now();
+        setCalendar(view);
+        return true;
+      },
+      unlink: async () => {
+        await unlinkCalendar();
+        setCalendar(null);
+      },
+    }),
+    [],
+  );
 
   // ---------- keep things fresh while open ----------
   useEffect(() => {
@@ -410,11 +461,12 @@ function App() {
       fetch("/api/tasks/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks || alerts.weekly ? tasks : [] }),
+        // PLATO calendar items go too, so ones ticked off here aren't reminded (the owner's are handled on the server).
+        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks || alerts.weekly ? [...tasks, ...(isOwner ? [] : calendarTasks(calendar, external, Date.now()))] : [] }),
       }).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
-  }, [tasks, alerts.tasks, alerts.weekly, alertsReady]);
+  }, [tasks, calendar, external, isOwner, alerts.tasks, alerts.weekly, alertsReady]);
 
   // ---------- actions ----------
   const markRead = useCallback((ids: string[], value = true) => {
@@ -447,7 +499,10 @@ function App() {
     [alerts.boards, changeAlerts, fetchNotices],
   );
 
-  const externalList = useMemo(() => (isOwner ? externalTasks(ownerData, external, now) : []), [isOwner, ownerData, external, now]);
+  const externalList = useMemo(
+    () => (isOwner ? externalTasks(ownerData, external, now) : calendarTasks(calendar, external, now)),
+    [isOwner, ownerData, calendar, external, now],
+  );
   const allTasks = useMemo(() => [...tasks, ...externalList], [tasks, externalList]);
   const posts = useMemo(() => (isOwner ? coursePosts(ownerData) : []), [isOwner, ownerData]);
 
@@ -460,7 +515,7 @@ function App() {
       update: (id: string, patch: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: stamp() } : t))),
       toggle: (id: string) => {
         // PLATO/NESPA items can't be edited, only ticked off (shared across the owner's devices).
-        if (id.startsWith("plato_") || id.startsWith("nespa_")) {
+        if (isExternalId(id)) {
           setExternal((prev) => ({ ...prev, [id]: { done: !prev[id]?.done, at: stamp() } }));
           return;
         }
@@ -471,9 +526,8 @@ function App() {
         tombstone([id]);
       },
       clearCompleted: (ids: string[]) => {
-        const isExternal = (id: string) => id.startsWith("plato_") || id.startsWith("nespa_");
-        const own = new Set(ids.filter((id) => !isExternal(id)));
-        const external = ids.filter(isExternal);
+        const own = new Set(ids.filter((id) => !isExternalId(id)));
+        const external = ids.filter(isExternalId);
         if (own.size > 0) {
           setTasks((prev) => prev.filter((t) => !own.has(t.id)));
           tombstone([...own]);
@@ -695,6 +749,8 @@ function App() {
         setBoards={setBoards}
         syncCode={syncCode}
         syncActions={syncActions}
+        calendar={isOwner ? null : calendar}
+        calendarActions={calendarActions}
         isOwner={isOwner}
         ownerData={ownerData}
         ownerActions={ownerActions}

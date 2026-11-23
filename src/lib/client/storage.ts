@@ -22,6 +22,9 @@ export const KEYS = {
   seededBoards: 'seeded_boards_v1',
   /** This device's sync code, if it syncs with other devices (not the owner's devices, which sync anyway). */
   syncCode: 'sync_code_v1',
+  /** PLATO calendar link: this device's key for reading its deadlines (never the link itself), and the last deadlines. */
+  platoCalendarKey: 'plato_calendar_key_v1',
+  platoCalendar: 'plato_calendar_v1',
 } as const;
 
 // Keys from older versions. PLATO credentials were kept here in plain text —
