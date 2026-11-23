@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { GraduationCap, X } from "lucide-react";
+import { dday, relative } from "@/lib/client/time";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -120,5 +121,15 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
         {children}
       </div>
     </div>
+  );
+}
+
+/** A tilted "D-3" sticker; the exact time is in its tooltip. */
+export function DdaySticker({ due, now }: { due: number; now: number }) {
+  const d = dday(due, now);
+  return (
+    <span className={cn("dday", d.tone === "over" && "dday--over", d.tone === "today" && "dday--today", d.tone === "soon" && "dday--soon")} title={d.tone === "over" ? "Overdue" : relative(due, now)}>
+      {d.label}
+    </span>
   );
 }

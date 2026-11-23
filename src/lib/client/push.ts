@@ -1,7 +1,13 @@
 import type { AlertCategories } from './types';
 import { getDeviceId } from './storage';
 
-export const NO_ALERTS: AlertCategories = { cse: false, international: false, tasks: false, courses: false };
+export const NO_ALERTS: AlertCategories = { boards: [], tasks: false, weekly: false, courses: false };
+export const anyAlertOn = (a: AlertCategories) => a.boards.length > 0 || a.tasks || a.weekly || a.courses;
+
+function fromServer(c: unknown): AlertCategories {
+  const v = (c && typeof c === 'object' ? c : {}) as Partial<AlertCategories>;
+  return { ...NO_ALERTS, ...v, boards: Array.isArray(v.boards) ? v.boards : [] };
+}
 
 export type PushSupport =
   | { ok: true }
@@ -85,7 +91,7 @@ export async function getAlertState(): Promise<{ categories: AlertCategories; su
     if (!sub) return { categories: NO_ALERTS, subscribed: false };
     const res = await fetch(`/api/push/categories?deviceId=${encodeURIComponent(getDeviceId())}`, { cache: 'no-store' });
     const data = await res.json();
-    return { categories: { ...NO_ALERTS, ...(data?.categories ?? {}) }, subscribed: true };
+    return { categories: fromServer(data?.categories), subscribed: true };
   } catch {
     return { categories: NO_ALERTS, subscribed: false };
   }
@@ -102,7 +108,8 @@ export async function refreshSubscription(): Promise<void> {
 }
 
 export async function setAlerts(patch: Partial<AlertCategories>): Promise<AlertCategories> {
-  const turningOn = Object.values(patch).some(Boolean);
+  // Turning a switch on (or keeping some board on) needs permission and a subscription.
+  const turningOn = Object.values(patch).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
   if (turningOn) {
     const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
     if (permission !== 'granted') throw new Error('permission-denied');
@@ -115,8 +122,8 @@ export async function setAlerts(patch: Partial<AlertCategories>): Promise<AlertC
   });
   if (!res.ok) throw new Error('save-failed');
   const data = await res.json();
-  const next: AlertCategories = { ...NO_ALERTS, ...(data?.categories ?? {}) };
-  if (!next.cse && !next.international && !next.tasks && !next.courses) await turnOffAll();
+  const next = fromServer(data?.categories);
+  if (!anyAlertOn(next)) await turnOffAll();
   return next;
 }
 

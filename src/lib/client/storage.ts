@@ -16,6 +16,15 @@ export const KEYS = {
   external: 'owner_external_v1',
   isOwner: 'owner_device_v1',
   ownerData: 'owner_data_v1',
+  /** Boards this device shows (all by default). */
+  boards: 'boards_v1',
+  /** Boards whose older notices were already marked read when they first appeared on this device. */
+  seededBoards: 'seeded_boards_v1',
+  /** This device's sync code, if it syncs with other devices (not the owner's devices, which sync anyway). */
+  syncCode: 'sync_code_v1',
+  /** PLATO calendar link: this device's key for reading its deadlines (never the link itself), and the last deadlines. */
+  platoCalendarKey: 'plato_calendar_key_v1',
+  platoCalendar: 'plato_calendar_v1',
 } as const;
 
 // Keys from older versions. PLATO credentials were kept here in plain text —

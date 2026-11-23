@@ -11,8 +11,10 @@ import { SettingsSheet, type InstallPrompt } from "@/components/SettingsSheet";
 import { NoticeSheet } from "@/components/NoticeSheet";
 import { KEYS, getDeviceId, loadTasks, loadTheme, migrateStorage, read, saveTheme, write, type NoticeCache } from "@/lib/client/storage";
 import { getAlertState, NO_ALERTS, refreshSubscription, registerServiceWorker, setAlerts } from "@/lib/client/push";
-import { TABS, type AlertCategories, type Notice, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { BOARD_IDS, DEFAULT_BOARDS, MAX_SHOWN_BOARDS, TABS, type AlertCategories, type Notice, type NoticeSource, type OwnerData, type Tab, type Task, type Theme } from "@/lib/client/types";
+import { cachedCalendar, calendarTasks, linkCalendar, loadCalendar, unlinkCalendar, type CalendarView } from "@/lib/client/platoCalendar";
 import { coursePosts, externalTasks, fetchOwnerData, lockOwner, pushOwnerState, syncOwnerNow, unlockOwner, type SyncState } from "@/lib/client/owner";
+import { createSyncCode, deleteSyncCode, pushSyncCode, readSyncCode } from "@/lib/client/syncCode";
 import { formatDate } from "@/lib/client/time";
 import { isFreshNotice } from "@/lib/client/notices";
 
@@ -43,6 +45,10 @@ type Boot = {
    * instead of 100+ unread ones.
    */
   seedReadSince: number | null;
+  /** Boards this device shows. */
+  boards: NoticeSource[];
+  /** Boards whose older notices were already marked read when they first appeared here. */
+  seededBoards: string[];
   tab: Tab;
   noticeId: string | null;
 };
@@ -58,6 +64,16 @@ function parseLink(href: string): { tab: Tab | null; noticeId: string | null } {
   }
 }
 
+/** Saved boards in list order (core first), or the core boards for a new device. */
+function shownBoards(stored: unknown): NoticeSource[] {
+  if (!Array.isArray(stored)) return DEFAULT_BOARDS;
+  const list = BOARD_IDS.filter((b) => stored.includes(b)).slice(0, MAX_SHOWN_BOARDS);
+  return list.length > 0 ? list : DEFAULT_BOARDS;
+}
+
+/** PLATO/NESPA items (and PLATO calendar items) are read-only: they can only be ticked off or cleared. */
+const isExternalId = (id: string) => /^(plato_|platocal_|nespa_)/.test(id);
+
 let bootData: Boot | null = null;
 /** Reads everything saved on this device once, on the client only. */
 function boot(): Boot {
@@ -70,6 +86,9 @@ function boot(): Boot {
   const seed = read<number | "done" | null>(KEYS.readSeed, null);
   const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
   if (seedReadSince !== null) write(KEYS.readSeed, seedReadSince);
+  const storedBoards = read<string[] | null>(KEYS.boards, null);
+  // Before boards could be added, everyone had CSE and International; those are already "seeded".
+  const seededBoards = read<string[] | null>(KEYS.seededBoards, null) ?? (seed === "done" ? ["cse", "international"] : []);
   bootData = {
     theme: loadTheme(),
     tasks: loadTasks(),
@@ -77,6 +96,8 @@ function boot(): Boot {
     cache: cache && Array.isArray(cache.notices) ? { updatedAt: cache.updatedAt || 0, notices: dedupe(cache.notices) } : null,
     sinceTs,
     seedReadSince,
+    boards: shownBoards(storedBoards),
+    seededBoards,
     tab: link.tab ?? "briefing",
     noticeId: link.noticeId,
   };
@@ -115,7 +136,14 @@ function App() {
   const [ownerData, setOwnerData] = useState<OwnerData | null>(() => (read<boolean>(KEYS.isOwner, false) ? read<OwnerData | null>(KEYS.ownerData, null) : null));
   const [external, setExternal] = useState<SyncState["external"]>(() => read(KEYS.external, {}));
   const [deletedTasks, setDeletedTasks] = useState<Record<string, number>>(() => read(KEYS.deletedTasks, {}));
+  // PLATO deadlines from the student's calendar link (not on owner devices, which have PLATO already).
+  const [calendar, setCalendar] = useState<CalendarView | null>(() => cachedCalendar());
   const seedReadSince = useRef<number | null>(boot().seedReadSince);
+  const seededBoards = useRef(new Set(boot().seededBoards));
+  const [boards, setBoardsState] = useState<NoticeSource[]>(() => boot().boards);
+  const boardsRef = useRef(boards);
+  const pendingRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refetch = useRef<((bypassCache?: boolean) => Promise<void>) | null>(null);
 
   // ---------- deep links: ?tab=notices&notice=<id> (used by push notifications) ----------
   const applyUrl = useCallback((href: string) => {
@@ -128,7 +156,9 @@ function App() {
     lastFetch.current = Date.now();
     try {
       // After a push the shared CDN copy may be up to 30 s old; ask the server directly.
-      const res = await fetch(bypassCache ? `/api/notices?t=${Date.now()}` : "/api/notices", { cache: "no-store" });
+      // Sorted, so every device showing the same boards shares one CDN copy.
+      const query = `boards=${[...boardsRef.current].sort().join(",")}`;
+      const res = await fetch(bypassCache ? `/api/notices?${query}&t=${Date.now()}` : `/api/notices?${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       if (Array.isArray(data.notices)) {
@@ -145,6 +175,24 @@ function App() {
           setReadIds((prev) => new Set([...prev, ...old]));
           seedReadSince.current = null;
           write(KEYS.readSeed, "done");
+          for (const n of list) seededBoards.current.add(n.source);
+        }
+        // A board that's new to this device (e.g. one added in an update) starts with its older
+        // notices marked read, so it doesn't arrive with 100+ unread.
+        const fresh = [...new Set(list.map((n) => n.source))].filter((s) => !seededBoards.current.has(s));
+        if (fresh.length > 0 && seedReadSince.current === null) {
+          const t = Date.now();
+          const old = list.filter((n) => fresh.includes(n.source) && !isFreshNotice(n, t, t - 2 * 86_400_000)).map((n) => n.id);
+          setReadIds((prev) => new Set([...prev, ...old]));
+          fresh.forEach((s) => seededBoards.current.add(s));
+        }
+        write(KEYS.seededBoards, [...seededBoards.current]);
+        // A board read for the first time arrives on the next check; look again shortly.
+        if (Array.isArray(data.pending) && data.pending.length > 0 && !pendingRetry.current) {
+          pendingRetry.current = setTimeout(() => {
+            pendingRetry.current = null;
+            refetch.current?.(true);
+          }, 20_000);
         }
       }
     } catch {
@@ -153,6 +201,10 @@ function App() {
       setLoadingNotices(false);
     }
   }, []);
+
+  useEffect(() => {
+    refetch.current = fetchNotices;
+  }, [fetchNotices]);
 
   // ---------- first load ----------
   useEffect(() => {
@@ -188,6 +240,51 @@ function App() {
       window.removeEventListener("beforeinstallprompt", onInstall);
     };
   }, [applyUrl, fetchNotices]);
+
+  // ---------- PLATO calendar link: re-read on open, then every 10 minutes while visible ----------
+  const lastCalendar = useRef(0);
+  useEffect(() => {
+    if (isOwner) return;
+    const load = async () => {
+      if (Date.now() - lastCalendar.current < 2 * 60_000) return;
+      lastCalendar.current = Date.now();
+      const view = await loadCalendar();
+      if (view !== "offline") setCalendar(view);
+    };
+    load();
+    const tick = setInterval(() => document.visibilityState === "visible" && Date.now() - lastCalendar.current > 10 * 60_000 && load(), 60_000);
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isOwner]);
+
+  const calendarActions = useMemo(
+    () => ({
+      link: async (url: string) => {
+        const r = await linkCalendar(url);
+        if (r.ok) {
+          lastCalendar.current = Date.now();
+          setCalendar(r.calendar);
+        }
+        return r;
+      },
+      refresh: async () => {
+        const view = await loadCalendar(true);
+        if (view === "offline") return false;
+        lastCalendar.current = Date.now();
+        setCalendar(view);
+        return true;
+      },
+      unlink: async () => {
+        await unlinkCalendar();
+        setCalendar(null);
+      },
+    }),
+    [],
+  );
 
   // ---------- keep things fresh while open ----------
   useEffect(() => {
@@ -237,11 +334,16 @@ function App() {
     write(KEYS.deletedTasks, deletedTasks);
   }, [external, deletedTasks]);
 
-  // ---------- owner mode: PLATO/NESPA data and syncing across the owner's devices ----------
-  const latest = useRef({ tasks, readIds, external, deletedTasks, isOwner });
+  // ---------- syncing across devices: the owner's devices, or any student's via a sync code ----------
+  const [syncCode, setSyncCodeState] = useState<string | null>(() => read<string | null>(KEYS.syncCode, null));
+  const setSyncCode = useCallback((code: string | null) => {
+    setSyncCodeState(code);
+    write(KEYS.syncCode, code);
+  }, []);
+  const latest = useRef({ tasks, readIds, external, deletedTasks, isOwner, syncCode });
   // Declared before the effects below, so they always see this render's values.
   useEffect(() => {
-    latest.current = { tasks, readIds, external, deletedTasks, isOwner };
+    latest.current = { tasks, readIds, external, deletedTasks, isOwner, syncCode };
   });
   const localVersion = useRef(0);
   const applyingRemote = useRef(false);
@@ -261,19 +363,63 @@ function App() {
     }
   }, []);
 
-  /** Sends this device's tasks and read state; adopts the merged copy unless something changed meanwhile. */
-  const syncState = useCallback(async () => {
-    const cur = latest.current;
-    if (!cur.isOwner) return;
-    const version = localVersion.current;
-    const merged = await pushOwnerState({ tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external });
-    if (!merged || localVersion.current !== version) return;
+  const adoptMerged = useCallback((merged: SyncState) => {
     applyingRemote.current = true;
     setTasks(merged.tasks.map((t) => ({ ...t, source: "own" as const })));
     setReadIds(new Set(merged.readIds));
-    setExternal(merged.external);
-    setDeletedTasks(merged.deleted);
+    setExternal(merged.external ?? {});
+    setDeletedTasks(merged.deleted ?? {});
   }, []);
+
+  /** Sends this device's tasks and read state; adopts the merged copy unless something changed meanwhile. */
+  const syncState = useCallback(async () => {
+    const cur = latest.current;
+    if (!cur.isOwner && !cur.syncCode) return;
+    const version = localVersion.current;
+    const mine: SyncState = { tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external };
+    // The owner's devices sync through owner mode; everyone else through their sync code.
+    const merged = cur.isOwner ? await pushOwnerState(mine) : await pushSyncCode(cur.syncCode!, mine);
+    if (merged === "unknown") {
+      // The synced copy was deleted from another device: stop syncing here, keep the local data.
+      setSyncCode(null);
+      return;
+    }
+    if (!merged || localVersion.current !== version) return;
+    adoptMerged(merged);
+  }, [adoptMerged, setSyncCode]);
+
+  const syncActions = useMemo(
+    () => ({
+      /** Starts syncing: uploads this device's data and returns the new code. */
+      create: async () => {
+        const cur = latest.current;
+        const made = await createSyncCode({ tasks: cur.tasks, deleted: cur.deletedTasks, readIds: [...cur.readIds], external: cur.external });
+        if (!made) return null;
+        setSyncCode(made.code);
+        return made.code;
+      },
+      /** Joins another device's code; this device's data is merged in. */
+      join: async (code: string) => {
+        const clean = code.trim().toUpperCase();
+        const found = await readSyncCode(clean);
+        if (found === "unknown") return "unknown" as const;
+        if (!found) return "error" as const;
+        latest.current = { ...latest.current, syncCode: clean };
+        setSyncCode(clean);
+        await syncState();
+        return "ok" as const;
+      },
+      /** Stops syncing on this device only. */
+      leave: () => setSyncCode(null),
+      /** Deletes the synced copy for every device using the code. */
+      wipe: async () => {
+        const code = latest.current.syncCode;
+        if (code) await deleteSyncCode(code);
+        setSyncCode(null);
+      },
+    }),
+    [setSyncCode, syncState],
+  );
 
   useEffect(() => {
     const first = setTimeout(loadOwnerData, 0);
@@ -291,10 +437,10 @@ function App() {
     };
   }, [loadOwnerData, syncState]);
 
-  // First sync as soon as this device is known to be the owner's.
+  // First sync as soon as this device is known to be the owner's, or has a sync code.
   useEffect(() => {
-    if (isOwner) syncState();
-  }, [isOwner, syncState]);
+    if (isOwner || syncCode) syncState();
+  }, [isOwner, syncCode, syncState]);
 
   // Local edits: send them a moment later (several quick edits go as one).
   useEffect(() => {
@@ -303,23 +449,24 @@ function App() {
       return;
     }
     localVersion.current++;
-    if (!latest.current.isOwner) return;
+    if (!latest.current.isOwner && !latest.current.syncCode) return;
     const t = setTimeout(syncState, 1500);
     return () => clearTimeout(t);
   }, [tasks, readIds, external, deletedTasks, syncState]);
 
-  // Deadline reminders need a server-side copy of upcoming tasks — only while that alert is on.
+  // Deadline reminders and the weekly preview need a server-side copy of upcoming tasks; only while one of them is on.
   useEffect(() => {
     if (!alertsReady) return;
     const t = setTimeout(() => {
       fetch("/api/tasks/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks ? tasks : [] }),
+        // PLATO calendar items go too, so ones ticked off here aren't reminded (the owner's are handled on the server).
+        body: JSON.stringify({ deviceId: getDeviceId(), tasks: alerts.tasks || alerts.weekly ? [...tasks, ...(isOwner ? [] : calendarTasks(calendar, external, Date.now()))] : [] }),
       }).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
-  }, [tasks, alerts.tasks, alertsReady]);
+  }, [tasks, calendar, external, isOwner, alerts.tasks, alerts.weekly, alertsReady]);
 
   // ---------- actions ----------
   const markRead = useCallback((ids: string[], value = true) => {
@@ -339,7 +486,23 @@ function App() {
     return next;
   }, []);
 
-  const externalList = useMemo(() => (isOwner ? externalTasks(ownerData, external, now) : []), [isOwner, ownerData, external, now]);
+  const setBoards = useCallback(
+    (next: NoticeSource[]) => {
+      const list = shownBoards(next);
+      boardsRef.current = list;
+      setBoardsState(list);
+      write(KEYS.boards, list);
+      fetchNotices();
+      // A hidden board stops alerting too.
+      if (alerts.boards.some((b) => !list.includes(b))) changeAlerts({ boards: alerts.boards.filter((b) => list.includes(b)) }).catch(() => {});
+    },
+    [alerts.boards, changeAlerts, fetchNotices],
+  );
+
+  const externalList = useMemo(
+    () => (isOwner ? externalTasks(ownerData, external, now) : calendarTasks(calendar, external, now)),
+    [isOwner, ownerData, calendar, external, now],
+  );
   const allTasks = useMemo(() => [...tasks, ...externalList], [tasks, externalList]);
   const posts = useMemo(() => (isOwner ? coursePosts(ownerData) : []), [isOwner, ownerData]);
 
@@ -352,7 +515,7 @@ function App() {
       update: (id: string, patch: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: stamp() } : t))),
       toggle: (id: string) => {
         // PLATO/NESPA items can't be edited, only ticked off (shared across the owner's devices).
-        if (id.startsWith("plato_") || id.startsWith("nespa_")) {
+        if (isExternalId(id)) {
           setExternal((prev) => ({ ...prev, [id]: { done: !prev[id]?.done, at: stamp() } }));
           return;
         }
@@ -363,9 +526,8 @@ function App() {
         tombstone([id]);
       },
       clearCompleted: (ids: string[]) => {
-        const isExternal = (id: string) => id.startsWith("plato_") || id.startsWith("nespa_");
-        const own = new Set(ids.filter((id) => !isExternal(id)));
-        const external = ids.filter(isExternal);
+        const own = new Set(ids.filter((id) => !isExternalId(id)));
+        const external = ids.filter(isExternalId);
         if (own.size > 0) {
           setTasks((prev) => prev.filter((t) => !own.has(t.id)));
           tombstone([...own]);
@@ -407,7 +569,9 @@ function App() {
 
   const openNotice = useCallback((id: string) => setOpenNoticeId(id), []);
   const selectedNotice = openNoticeId ? notices.find((n) => n.id === openNoticeId) ?? null : null;
-  const unreadCount = useMemo(() => notices.filter((n) => !readIds.has(n.id)).length, [notices, readIds]);
+  // Only the boards this device shows count anywhere (lists, Briefing, badges).
+  const shownNotices = useMemo(() => notices.filter((n) => boards.includes(n.source)), [notices, boards]);
+  const unreadCount = useMemo(() => shownNotices.filter((n) => !readIds.has(n.id)).length, [shownNotices, readIds]);
   const pendingCount = useMemo(() => allTasks.filter((t) => t.status === "pending").length, [allTasks]);
 
   const content = (
@@ -416,7 +580,7 @@ function App() {
         <BriefingTab
           now={now}
           sinceTs={sinceTs}
-          notices={notices}
+          notices={shownNotices}
           readIds={readIds}
           tasks={allTasks}
           posts={posts}
@@ -437,7 +601,8 @@ function App() {
       {tab === "notices" && (
         <NoticesTab
           now={now}
-          notices={notices}
+          notices={shownNotices}
+          boards={boards}
           readIds={readIds}
           loading={loadingNotices}
           error={noticeError}
@@ -452,7 +617,7 @@ function App() {
         />
       )}
       {tab === "tasks" && (
-        <TasksTab now={now} tasks={allTasks} synced={isOwner} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
+        <TasksTab now={now} tasks={allTasks} synced={isOwner || Boolean(syncCode)} actions={taskActions} alerts={alerts} openSettings={() => setSettingsOpen(true)} />
       )}
       {tab === "calendar" && <CalendarTab now={now} tasks={allTasks} onToggleTask={taskActions.toggle} goTo={setTab} />}
     </>
@@ -498,14 +663,17 @@ function App() {
                 onClick={() => setTab(id)}
                 aria-current={tab === id ? "page" : undefined}
                 className={cn(
-                  "relative flex-1 flex flex-col items-center gap-0.5 py-2 rounded-2xl border-2 transition-colors",
-                  tab === id ? "bg-muted text-primary border-border" : "border-transparent text-muted-foreground",
+                  "nav-tab relative flex-1 flex flex-col items-center gap-0.5 py-2 rounded-2xl border-2",
+                  // The active tab is a raised button, like the cards; tapping presses it down.
+                  tab === id
+                    ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-x-px -translate-y-px"
+                    : "border-transparent text-muted-foreground",
                 )}
               >
                 <Icon size={22} />
                 <span className="text-[11px] font-extrabold">{label}</span>
                 {badge(id) > 0 && (
-                  <span className="absolute top-1 right-[22%] min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center border border-border">
+                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-secondary text-secondary-foreground text-[11px] font-extrabold flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
                     {badge(id) > 99 ? "99+" : badge(id)}
                   </span>
                 )}
@@ -589,6 +757,12 @@ function App() {
         changeAlerts={changeAlerts}
         installPrompt={installPrompt}
         clearInstallPrompt={() => setInstallPrompt(null)}
+        boards={boards}
+        setBoards={setBoards}
+        syncCode={syncCode}
+        syncActions={syncActions}
+        calendar={isOwner ? null : calendar}
+        calendarActions={calendarActions}
         isOwner={isOwner}
         ownerData={ownerData}
         ownerActions={ownerActions}

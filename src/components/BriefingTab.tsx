@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Globe, Monitor, Smartphone, TriangleAlert } from "lucide-react";
-import { cn, Pill } from "./ui";
+import { ArrowRight, BellRing, Check, ExternalLink, Smartphone, TriangleAlert } from "lucide-react";
+import { cn, DdaySticker } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
 import { isIOS, isStandalone } from "@/lib/client/push";
 import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
-import { SOURCE_LABEL } from "@/lib/client/types";
+import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
+import { BoardIcon } from "./BoardIcon";
 import { isFreshNotice } from "@/lib/client/notices";
 
 const DAY = 86_400_000;
@@ -47,6 +48,8 @@ type Update = {
   text: string;
   at: number;
   url?: string;
+  /** Set for board notices, to show the board's icon. */
+  source?: string;
   open: () => void;
 };
 
@@ -132,9 +135,10 @@ export function BriefingTab(p: Props) {
       title: n.title,
       tag: SOURCE_LABEL[n.source],
       tone: "primary",
-      text: `${n.source === "cse" ? "정보컴퓨터공학부" : "국제처"} board · posted ${n.date}`,
+      text: `${boardInfo(n.source)?.name ?? "PNU"} · posted ${n.date}`,
       at: n.firstSeenAt,
       url: n.url,
+      source: n.source,
       open: () => p.onOpenNotice(n.id),
     }));
     return [...fromPosts, ...fromNotices].sort((a, b) => b.at - a.at).slice(0, 7);
@@ -157,15 +161,14 @@ export function BriefingTab(p: Props) {
   });
   const maxCount = Math.max(1, ...week.map((w) => w.count));
 
-  const alertsOff = p.alertsReady && !p.alerts.cse && !p.alerts.international && !p.alerts.tasks;
+  const alertsOff = p.alertsReady && p.alerts.boards.length === 0 && !p.alerts.tasks;
   const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
   const painting = paintingOfTheDay(now);
   const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
   const weekday = formatDate(now, { weekday: "long" });
   // "19 NOV 2026", in Korea time.
-  const edgeDate = [formatDate(now, { day: "2-digit" }), formatDate(now, { month: "short" }).toUpperCase(), formatDate(now, { year: "numeric" })].join(" ");
-  const edgeTime = formatDate(now, { hour: "2-digit", minute: "2-digit", hour12: true });
+  const edgeDate = formatDate(now, { year: "numeric", month: "long", day: "numeric" });
 
   const problems = p.ownerData ? ([p.ownerData.plato, p.ownerData.nespa].map((s) => s.error).filter(Boolean) as string[]) : [];
   const sources = [
@@ -178,11 +181,16 @@ export function BriefingTab(p: Props) {
   return (
     <div className="brief pb-4">
       {/* ---------- hero: the painting of the day ---------- */}
-      <header>
-        <div className="brief-edges" aria-hidden>
+      {/* A newspaper clipping taped into the notebook */}
+      <header className="brief-clip">
+        <span className="tape tape--l" aria-hidden />
+        <span className="tape tape--r" aria-hidden />
+        <p className="brief-dateline">
           <span>{edgeDate}</span>
-          <span>{edgeTime}</span>
-        </div>
+          <span>Pusan National University</span>
+        </p>
+        <span className="brief-the brief-day-kicker">The</span>
+        <h1 className="brief-day">{weekday} Brief</h1>
         <figure className="brief-frame">
           <div className="brief-frame__canvas">
             <Image
@@ -196,10 +204,6 @@ export function BriefingTab(p: Props) {
               style={{ objectPosition: painting.focus ?? "50% 50%" }}
               onLoad={() => setLoadedSlug(painting.slug)}
             />
-            <div className="brief-frame__overlay">
-              <span className="brief-the">The</span>
-              <h1 className="brief-day">{weekday} Brief</h1>
-            </div>
           </div>
         </figure>
         <p className="brief-caption">{paintingCaption(painting)}</p>
@@ -229,6 +233,8 @@ export function BriefingTab(p: Props) {
         </section>
       )}
 
+      <div className="brief-cols">
+      <div>
       {/* ---------- to-dos ---------- */}
       <section className="brief-section">
         <h2 className="brief-h2">
@@ -265,6 +271,7 @@ export function BriefingTab(p: Props) {
         )}
       </section>
 
+      </div>
       {/* ---------- new updates ---------- */}
       <section className="brief-section">
         <h2 className="brief-h2">New updates</h2>
@@ -298,7 +305,7 @@ export function BriefingTab(p: Props) {
                         style={{ ["--tilt" as string]: `${(i % 3) - 1.5}deg` }}
                         aria-label={`Open "${u.title}" on the original site`}
                       >
-                        {u.tag === "CSE" ? <Monitor size={11} /> : u.tag === "International" ? <Globe size={11} /> : <ExternalLink size={11} />}
+                        {u.source ? <BoardIcon source={u.source} size={11} /> : <ExternalLink size={11} />}
                       </a>
                     )}
                   </p>
@@ -311,6 +318,8 @@ export function BriefingTab(p: Props) {
           </div>
         )}
       </section>
+
+      </div>
 
       {/* ---------- your day ---------- */}
       {dayParts.length > 0 && (
@@ -434,8 +443,6 @@ function TodoItem({ task, now, onToggle }: { task: Task; now: number; onToggle: 
 }
 
 export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onToggle: (id: string) => void }) {
-  const overdue = task.status === "pending" && task.dueDate < now;
-  const soon = task.status === "pending" && !overdue && task.dueDate - now < DAY;
   const done = task.status === "completed";
   return (
     <li className={cn("cozy-card bg-card p-3 flex items-center gap-3", done && "opacity-60 border-dashed")}>
@@ -463,9 +470,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
         </a>
       )}
       {!done && (
-        <Pill tone={overdue ? "danger" : soon ? "primary" : "muted"} className="shrink-0">
-          {overdue ? "Overdue" : relative(task.dueDate, now)}
-        </Pill>
+        <DdaySticker due={task.dueDate} now={now} />
       )}
     </li>
   );

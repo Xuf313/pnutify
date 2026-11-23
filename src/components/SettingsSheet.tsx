@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, BookOpen, CircleCheck, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
+import { Bell, BookOpen, CircleCheck, Copy, Link2, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
-import { isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
+import { anyAlertOn, isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
 import { formatDue, relative } from "@/lib/client/time";
 import { fetchAlertStatus, type AlertStatus } from "@/lib/client/owner";
-import { THEMES, type AlertCategories, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
+import { BOARDS, THEMES, type AlertCategories, type BoardInfo, type NoticeSource, type OwnerData, type OwnerSource, type Theme } from "@/lib/client/types";
+import { BoardPicker } from "./BoardPicker";
+import { PlatoCalendarSection, type CalendarActions } from "./PlatoCalendarSection";
+import type { CalendarView } from "@/lib/client/platoCalendar";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -20,6 +23,19 @@ type Props = {
   changeAlerts: (patch: Partial<AlertCategories>) => Promise<AlertCategories>;
   installPrompt: InstallPrompt | null;
   clearInstallPrompt: () => void;
+  /** Boards this device shows. */
+  boards: NoticeSource[];
+  setBoards: (b: NoticeSource[]) => void;
+  syncCode: string | null;
+  syncActions: {
+    create: () => Promise<string | null>;
+    join: (code: string) => Promise<"ok" | "unknown" | "error">;
+    leave: () => void;
+    wipe: () => Promise<void>;
+  };
+  /** PLATO calendar link (other students; the owner has PLATO already). */
+  calendar: CalendarView | null;
+  calendarActions: CalendarActions;
   isOwner: boolean;
   ownerData: OwnerData | null;
   ownerActions: {
@@ -29,26 +45,34 @@ type Props = {
   };
 };
 
-const ALERT_ROWS: { key: keyof AlertCategories; title: string; body: string }[] = [
-  { key: "cse", title: "CSE notices", body: "New posts on the 정보컴퓨터공학부 board" },
-  { key: "international", title: "International notices", body: "New posts on the 국제처 board" },
-  { key: "tasks", title: "Deadline reminders", body: "24 hours and 1 hour before your tasks are due" },
-];
-
-const COURSE_ROW = { key: "courses" as const, title: "PLATO & NESPA posts", body: "New course announcements and NESPA notices (owner only)" };
+type Toggle = "tasks" | "weekly" | "courses";
+/** A switch: one of the plain toggles, or a board. */
+type AlertRow = { key: string; title: string; body: string; checked: (a: AlertCategories) => boolean; patch: (a: AlertCategories, on: boolean) => Partial<AlertCategories> };
+const toggleRow = (key: Toggle, title: string, body: string): AlertRow => ({ key, title, body, checked: (a) => a[key], patch: (_, on) => ({ [key]: on }) });
+const TASK_ROW = toggleRow("tasks", "Deadline reminders", "24 hours and 1 hour before your tasks are due");
+const WEEKLY_ROW = toggleRow("weekly", "Weekly preview", "Sunday at 8 pm: the coming week's deadlines, day by day");
+const COURSE_ROW = toggleRow("courses", "PLATO & NESPA posts", "New course announcements and NESPA notices (owner only)");
+const boardRow = (b: BoardInfo): AlertRow => ({
+  key: `board:${b.id}`,
+  title: b.core ? `${b.label} notices` : b.name,
+  body: b.core ? `New posts on the ${b.name} board` : `New posts on the ${b.college} · ${b.name} board`,
+  checked: (a) => a.boards.includes(b.id),
+  patch: (a, on) => ({ boards: on ? [...a.boards.filter((x) => x !== b.id), b.id] : a.boards.filter((x) => x !== b.id) }),
+});
 
 export function SettingsSheet(p: Props) {
-  const [busy, setBusy] = useState<keyof AlertCategories | "test" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const support = pushSupport();
-  const anyOn = p.alerts.cse || p.alerts.international || p.alerts.tasks || p.alerts.courses;
-  const rows = p.isOwner ? [...ALERT_ROWS, COURSE_ROW] : ALERT_ROWS;
+  const anyOn = anyAlertOn(p.alerts);
+  // One switch per board this device shows, then deadlines (and course posts for the owner).
+  const rows: AlertRow[] = [...BOARDS.filter((b) => p.boards.includes(b.id)).map(boardRow), TASK_ROW, WEEKLY_ROW, ...(p.isOwner ? [COURSE_ROW] : [])];
 
-  const toggle = async (key: keyof AlertCategories, value: boolean) => {
-    setBusy(key);
+  const toggle = async (row: AlertRow, value: boolean) => {
+    setBusy(row.key);
     setMessage(null);
     try {
-      await p.changeAlerts({ [key]: value });
+      await p.changeAlerts(row.patch(p.alerts, value));
     } catch (e) {
       const m = e instanceof Error ? e.message : "";
       setMessage(
@@ -98,9 +122,9 @@ export function SettingsSheet(p: Props) {
                   </div>
                   <Switch
                     label={row.title}
-                    checked={p.alerts[row.key]}
+                    checked={row.checked(p.alerts)}
                     disabled={!p.alertsReady || busy !== null}
-                    onChange={(v) => toggle(row.key, v)}
+                    onChange={(v) => toggle(row, v)}
                   />
                 </li>
               ))}
@@ -117,6 +141,21 @@ export function SettingsSheet(p: Props) {
             </p>
           )}
         </section>
+
+        {/* ---------- boards ---------- */}
+        <section>
+          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+            <Newspaper size={18} className="text-primary" /> Boards
+          </h3>
+          <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
+          <BoardPicker boards={p.boards} setBoards={p.setBoards} />
+        </section>
+
+        {/* ---------- PLATO deadlines from the calendar link (owner devices have PLATO already) ---------- */}
+        {!p.isOwner && <PlatoCalendarSection calendar={p.calendar} actions={p.calendarActions} />}
+
+        {/* ---------- sync across devices (owner devices already sync) ---------- */}
+        {!p.isOwner && <SyncSection code={p.syncCode} actions={p.syncActions} />}
 
         {/* ---------- PLATO + NESPA (owner devices only) ---------- */}
         {p.isOwner && <OwnerSection data={p.ownerData} actions={p.ownerActions} />}
@@ -187,7 +226,7 @@ export function SettingsSheet(p: Props) {
           </h3>
           <ul className="text-sm text-muted-foreground flex flex-col gap-1.5 list-disc pl-5">
             <li>No account and no PLATO password. PNUtify never asks for your student login.</li>
-            <li>Your tasks and read notices stay in this browser.</li>
+            <li>Your tasks and read notices stay in this browser, unless you turn on sync. Then a copy is kept on the server under your sync code, and only devices with that code can read it.</li>
             <li>If deadline reminders are on, the titles and due times of your upcoming tasks are stored on the server only to send those reminders.</li>
           </ul>
           <button
@@ -449,5 +488,127 @@ function OwnerSignIn({ unlock }: { unlock: Props["ownerActions"]["unlock"] }) {
         </p>
       )}
     </form>
+  );
+}
+
+function SyncSection({ code, actions }: { code: string | null; actions: Props["syncActions"] }) {
+  const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
+  const [input, setInput] = useState("");
+  const [shown, setShown] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const copy = async () => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setNote("Copied. Enter it on your other device: Settings → Sync across devices → Enter a code.");
+    } catch {
+      setShown(true);
+    }
+  };
+
+  return (
+    <section>
+      <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+        <Link2 size={18} className="text-primary" /> Sync across devices
+      </h3>
+      {code ? (
+        <>
+          <p className="text-sm text-muted-foreground mb-2">Your tasks and read notices sync with every device that uses this code.</p>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <code className="rounded-lg bg-muted px-2.5 py-1.5 text-sm font-bold tracking-wider text-foreground" aria-label="Your sync code">
+              {shown ? code : code.replace(/[^-]/g, "•")}
+            </code>
+            <button onClick={() => setShown((v) => !v)} className="text-sm font-bold text-primary hover:underline">
+              {shown ? "Hide" : "Show"}
+            </button>
+            <button onClick={copy} className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+              <Copy size={14} /> Copy
+            </button>
+          </div>
+          <p className="text-xs font-bold text-muted-foreground mb-3">Anyone with this code can see and change your tasks. Don&apos;t share it with anyone else.</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <button onClick={actions.leave} className="text-sm font-bold text-muted-foreground hover:text-foreground">
+              Stop syncing on this device
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm("Delete the synced copy? Your other devices will stop syncing too. Each keeps its own data.")) return;
+                await actions.wipe();
+              }}
+              className="text-sm font-bold text-[#E5484D] hover:underline"
+            >
+              Delete synced data
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground mb-3">Keep your tasks and read notices the same on your phone and laptop. No account needed: you get a code to enter on your other device.</p>
+          {entering ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                setNote(null);
+                const r = await actions.join(input);
+                setBusy(false);
+                if (r === "ok") {
+                  setEntering(false);
+                  setInput("");
+                  setNote("Linked. This device now syncs.");
+                } else setNote(r === "unknown" ? "That code doesn't exist. Check it and try again." : "Couldn't reach the server. Try again.");
+              }}
+            >
+              <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider" htmlFor="sync-code">
+                Sync code from your other device
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="sync-code"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  className="flex-1 min-w-0 rounded-xl border-2 border-border bg-background px-3 py-2 text-sm font-bold tracking-wider"
+                />
+                <button disabled={busy || input.replace(/[\s-]/g, "").length < 20} className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50">
+                  Link
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setNote(null);
+                  const made = await actions.create();
+                  setBusy(false);
+                  if (made) setShown(true);
+                  else setNote("Couldn't create a code right now. Try again.");
+                }}
+                className="cozy-btn bg-primary text-primary-foreground px-3 py-2 text-sm font-extrabold disabled:opacity-50"
+              >
+                Create a sync code
+              </button>
+              <button onClick={() => setEntering(true)} className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold">
+                Enter a code
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {note && (
+        <p role="status" className="mt-2 text-sm font-bold">
+          {note}
+        </p>
+      )}
+    </section>
   );
 }

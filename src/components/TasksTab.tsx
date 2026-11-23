@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Bell, BellOff, Check, ExternalLink, Pencil, Plus, Trash2, X } from "lucide-react";
-import { cn, EmptyState, Pill } from "./ui";
-import { addDays, formatDue, fromKst, kstDay, relative } from "@/lib/client/time";
+import { cn, DdaySticker, EmptyState } from "./ui";
+import { addDays, formatDue, fromKst, kstDay } from "@/lib/client/time";
 import type { AlertCategories, Task } from "@/lib/client/types";
 
 type Actions = {
@@ -133,8 +133,6 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
 
 function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: number; onToggle: (id: string) => void; onEdit?: () => void; onDelete: () => void }) {
   const done = task.status === "completed";
-  const overdue = !done && task.dueDate < now;
-  const soon = !done && !overdue && task.dueDate - now < DAY;
   return (
     <li className={cn("cozy-card bg-card p-3 flex items-center gap-3", done && "opacity-60 border-dashed shadow-none")}>
       <button
@@ -156,9 +154,7 @@ function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: 
         </p>
       </div>
       {!done && (
-        <Pill tone={overdue ? "danger" : soon ? "primary" : "muted"} className="shrink-0 hidden sm:inline-flex">
-          {overdue ? "Overdue" : relative(task.dueDate, now)}
-        </Pill>
+        <DdaySticker due={task.dueDate} now={now} />
       )}
       <div className="flex shrink-0">
         {isExternal(task) ? (

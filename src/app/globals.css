@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
 @theme inline {
-  --font-sans: 'Nunito', sans-serif;
+  /* Nunito for Latin; Korean (which Nunito doesn't have) in IBM Plex Sans KR, so it looks the same on every phone. */
+  --font-sans: 'Nunito', 'IBM Plex Sans KR', sans-serif;
   --font-pixel: 'Pixelify Sans', monospace;
 
   --color-background: var(--t-background);
@@ -342,4 +343,92 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .brief-frame__canvas img, .brief-star, .brief-source, .brief-check { transition: none; }
   .brief-frame:hover .brief-frame__canvas img { transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   A notice read inside the app (markup rebuilt server-side)
+   ══════════════════════════════════════════════════════════════ */
+.notice-body { font-size: 0.95rem; line-height: 1.65; color: var(--color-foreground); overflow-wrap: anywhere; }
+.notice-body p, .notice-body div { margin: 0 0 0.55rem; }
+.notice-body div > div, .notice-body li > p { margin-bottom: 0; }
+.notice-body strong { font-weight: 800; }
+.notice-body h4 { font-weight: 800; font-size: 1.02rem; margin: 1rem 0 0.4rem; }
+.notice-body a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; font-weight: 700; }
+.notice-body ul, .notice-body ol { margin: 0 0 0.6rem 1.25rem; }
+.notice-body ul { list-style: disc; }
+.notice-body ol { list-style: decimal; }
+.notice-body img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.4rem 0; }
+.notice-body hr { border: 0; border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 30%, transparent); margin: 1rem 0; }
+.notice-body blockquote { border-left: 3px solid var(--color-muted); padding-left: 0.75rem; color: var(--color-muted-foreground); }
+/* Wide tables scroll sideways instead of stretching the sheet. */
+.notice-body table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.85rem; }
+.notice-body td, .notice-body th { border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent); padding: 0.35rem 0.5rem; vertical-align: top; min-width: 4rem; }
+.notice-body th { background: var(--color-muted); font-weight: 800; }
+
+/* ══════════════════════════════════════════════════════════════
+   The Briefing's front page: a newspaper clipping taped into the
+   notebook. Pixel nameplate, double rule, the painting, the lead line.
+   ══════════════════════════════════════════════════════════════ */
+.brief-clip {
+  position: relative; margin-top: 0.9rem; padding: 0.9rem 1rem 1.15rem;
+  background: var(--color-card); border: 2px solid var(--color-border); border-radius: 3px;
+  box-shadow: 4px 4px 0 var(--color-border); transform: rotate(-0.5deg);
+}
+.tape {
+  position: absolute; top: -13px; width: 88px; height: 26px; z-index: 1; opacity: 0.88;
+  background: var(--t-washi);
+  clip-path: polygon(4% 0, 96% 6%, 100% 30%, 95% 55%, 100% 80%, 96% 100%, 3% 94%, 0 70%, 5% 45%, 0 20%);
+}
+.tape--l { left: -18px; transform: rotate(-32deg); }
+.tape--r { right: -18px; transform: rotate(28deg); }
+.brief-dateline {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-size: 0.74rem; font-weight: 800; color: var(--color-muted-foreground);
+  padding-bottom: 0.45rem; border-bottom: 2px solid var(--color-border);
+}
+.brief-clip .brief-the { display: block; text-align: center; margin-top: 0.7rem; color: var(--color-primary); opacity: 1; }
+.brief-clip .brief-day {
+  text-align: center; color: var(--color-foreground); text-shadow: none;
+  font-size: clamp(2.3rem, 11.5vw, 3.7rem); line-height: 1; padding: 0.15rem 0 0.6rem; margin-bottom: 0.9rem;
+  border-bottom: 5px double var(--color-border);
+}
+.brief-clip .brief-frame { box-shadow: none; padding: 0.4rem; border-radius: 0.5rem; }
+.brief-clip .brief-frame__canvas { border-radius: 0.3rem; }
+.brief-clip .brief-caption { margin: 0.55rem 0 0; }
+.brief-clip .brief-blurb { font-size: 1.25rem; line-height: 1.35; margin: 0.6rem 0 0; }
+
+/* Sections open with a rule, like the sections of a paper */
+.brief-section { border-top: 2px solid var(--color-border); padding-top: 0.9rem; }
+.brief-push + .brief-cols > :first-child .brief-section:first-child, .brief-cols .brief-section { margin-top: 2.4rem; }
+
+/* Desktop: two columns, with a column rule */
+@media (min-width: 1024px) {
+  .brief { max-width: 54rem; }
+  .brief-clip { max-width: 40rem; margin-left: auto; margin-right: auto; }
+  .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
+  .brief-cols > :last-child { position: relative; }
+  .brief-cols > :last-child::before { content: ""; position: absolute; left: -1.25rem; top: 2.4rem; bottom: 0; border-left: 2px dashed color-mix(in srgb, var(--color-border) 30%, transparent); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   D-day stickers: "D-3", "D-DAY", "D+1" on tasks
+   ══════════════════════════════════════════════════════════════ */
+.dday {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 3.1rem;
+  /* Numbers in the rounded font: in the pixel font a small 2 reads like an 8. */
+  padding: 0.12rem 0.45rem; font-family: var(--font-sans); font-weight: 800; font-size: 0.78rem; line-height: 1.2; letter-spacing: 0.02em;
+  background: var(--color-card); color: var(--color-foreground);
+  border: 2px solid var(--color-border); border-radius: 6px; box-shadow: 2px 2px 0 var(--color-border);
+  transform: rotate(-3deg);
+}
+.dday--soon { background: var(--t-washi); color: #fff; }
+.dday--today { background: var(--color-primary); color: var(--color-primary-foreground); transform: rotate(3deg); }
+.dday--over { background: #E5484D; color: #fff; }
+
+/* The tab bar's active tab is a raised button that presses down */
+.nav-tab { transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease; }
+.nav-tab:active { transform: translate(2px, 2px); box-shadow: none; }
+
+@media (min-width: 768px) {
+  .brief-clip .brief-frame__canvas { aspect-ratio: 16 / 9; }
 }

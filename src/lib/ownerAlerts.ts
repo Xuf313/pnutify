@@ -1,6 +1,8 @@
 import { getRedis, isValidDeviceId, KEYS } from './redis';
 import { OWNER_KEYS, type LastPush } from './owner';
 import { normalizeCategories, type Categories } from './push';
+import { readMeta } from './notices';
+import { CORE_BOARD_IDS } from './boardList';
 import { getOwnerData, getOwnerState } from './ownerSync';
 
 const HOUR = 3_600_000;
@@ -39,10 +41,9 @@ export type AlertStatus = {
 export async function alertStatus(deviceId: string, now = Date.now()): Promise<AlertStatus | null> {
   const redis = getRedis();
   if (!redis || !isValidDeviceId(deviceId)) return null;
-  const [checkedAt, deadlinesAt, sub, cats, ownTasks, notified, lastPush] = await redis.mget<
-    [number | null, number | null, unknown, unknown, unknown, unknown, LastPush | null]
+  const [deadlinesAt, sub, cats, ownTasks, notified, lastPush] = await redis.mget<
+    [number | null, unknown, unknown, unknown, unknown, LastPush | null]
   >(
-    KEYS.checkedAt,
     KEYS.deadlinesCheckedAt,
     KEYS.subscription(deviceId),
     KEYS.categories(deviceId),
@@ -50,12 +51,15 @@ export async function alertStatus(deviceId: string, now = Date.now()): Promise<A
     KEYS.notifiedDeadlines(deviceId),
     OWNER_KEYS.lastPush(deviceId),
   );
-  const [devices, owners, data, state] = await Promise.all([
+  const [devices, owners, data, state, metas] = await Promise.all([
     redis.smembers(KEYS.devices).catch(() => [] as string[]),
     redis.smembers(OWNER_KEYS.devices).catch(() => [] as string[]),
     getOwnerData(),
     getOwnerState(),
+    readMeta(redis),
   ]);
+  // The cron checks the core boards on every run, so their last check is the cron's last run.
+  const checkedAt = Math.max(0, ...CORE_BOARD_IDS.map((id) => metas[id]?.checkedAt ?? 0));
 
   const sent = new Set(Array.isArray(notified) ? (notified as string[]) : []);
   const done = new Set(Object.entries(state.external).filter(([, x]) => x.done).map(([id]) => id));
@@ -85,7 +89,7 @@ export async function alertStatus(deviceId: string, now = Date.now()): Promise<A
 
   return {
     now,
-    lastCheckAt: Number(checkedAt) || null,
+    lastCheckAt: checkedAt || null,
     lastDeadlineCheckAt: Number(deadlinesAt) || null,
     device: {
       id: deviceId,
