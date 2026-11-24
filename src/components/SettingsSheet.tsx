@@ -20,8 +20,6 @@ type Props = {
   onClose: () => void;
   /** Scroll to this section when the sheet opens (e.g. from a Briefing card). */
   focusSection?: SettingsSection | null;
-  /** Show the owner sign-in (only after visiting with ?owner, so students don't see it). */
-  showOwnerSignIn?: boolean;
   theme: Theme;
   setTheme: (t: Theme) => void;
   alerts: AlertCategories;
@@ -262,7 +260,7 @@ export function SettingsSheet(p: Props) {
             Send feedback <ExternalLink size={11} />
           </a>
         </p>
-        {!p.isOwner && p.showOwnerSignIn && <OwnerSignIn unlock={p.ownerActions.unlock} />}
+        {!p.isOwner && <OwnerSignIn unlock={p.ownerActions.unlock} />}
       </div>
     </Sheet>
   );
