@@ -93,8 +93,6 @@ function boot(): Boot {
   getDeviceId();
   const cache = read<NoticeCache | null>(KEYS.notices, null);
   const link = parseLink(window.location.href);
-  // Visiting with ?owner shows the owner sign-in in Settings on this device from then on.
-  if (new URL(window.location.href).searchParams.has("owner")) write(KEYS.ownerHint, true);
   const sinceTs = read<number>(KEYS.lastVisit, 0) || Date.now() - 2 * 86_400_000;
   const seed = read<number | "done" | null>(KEYS.readSeed, null);
   const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
@@ -145,7 +143,6 @@ function App() {
     setTab(t);
   }, []);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
-  const [ownerHint] = useState(() => read<boolean>(KEYS.ownerHint, false));
   const [toast, setToast] = useState<ToastState | null>(null);
   /** Day the Calendar should open on (from the Briefing's week strip). */
   const [calendarFocus, setCalendarFocus] = useState<{ day: string; n: number } | null>(null);
@@ -874,7 +871,6 @@ function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         focusSection={settingsSection}
-        showOwnerSignIn={ownerHint}
         theme={theme}
         setTheme={setTheme}
         alerts={alerts}

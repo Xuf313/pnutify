@@ -127,13 +127,8 @@ test.describe('Settings and privacy', () => {
 
     await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
     const dialog = page.getByRole('dialog');
-    // Students don't see the owner sign-in; the owner opens PNUtify once with ?owner.
-    await expect(dialog.getByText('Owner sign-in')).toHaveCount(0);
+    await expect(dialog.getByText('Owner sign-in')).toBeVisible();
     await expect(dialog.getByRole('heading', { name: 'PLATO & NESPA' })).toHaveCount(0);
-
-    await page.goto('/?owner');
-    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
-    await expect(page.getByRole('dialog').getByText('Owner sign-in')).toBeVisible();
   });
 
   test('the server refuses owner data to a visitor', async ({ request }) => {

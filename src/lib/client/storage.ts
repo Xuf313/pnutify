@@ -15,8 +15,6 @@ export const KEYS = {
   deletedTasks: 'owner_deleted_v1',
   external: 'owner_external_v1',
   isOwner: 'owner_device_v1',
-  /** Set after opening PNUtify with ?owner: shows the owner sign-in in Settings. */
-  ownerHint: 'owner_hint_v1',
   ownerData: 'owner_data_v1',
   /** Boards this device shows (all by default). */
   boards: 'boards_v1',
