@@ -7,6 +7,7 @@
   /* Pixel lettering is for display sizes only (20px and up); Korean falls back to Plex, not a system monospace. */
   --font-pixel: 'Pixelify Sans', 'IBM Plex Sans KR', sans-serif;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
   --color-background: var(--t-background);
   --color-foreground: var(--t-foreground);
@@ -491,8 +492,32 @@ body {
 .dday--over { background: var(--color-danger); color: var(--color-danger-foreground); }
 
 /* The tab bar's active tab is a raised button that presses down */
-.nav-tab { transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease; }
+.nav-tab { transition: transform 0.1s var(--ease-out), box-shadow 0.1s var(--ease-out), background-color 0.15s ease, color 0.15s ease; }
 .nav-tab:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* The raised active tab slides to the tab you pick; its white label is clipped to it (see Nav.tsx). */
+.nav-pill { transition: transform 260ms var(--ease-in-out), translate 100ms var(--ease-out), box-shadow 100ms var(--ease-out); }
+.nav-active { transition: clip-path 260ms var(--ease-in-out); }
+.nav-wrap[data-instant] .nav-pill, .nav-wrap[data-instant] .nav-active { transition: none; }
+/* Pressing the active tab presses the pill down, like every other button. */
+.nav-active > * { transition: translate 100ms var(--ease-out); }
+.nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-pill { translate: 2px 2px; box-shadow: 0 0 0 var(--color-border); }
+.nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-active > * { translate: 2px 2px; }
+
+/* A tab's content settles in when you switch to it. */
+.tab-enter { animation: tab-enter 200ms var(--ease-out); }
+@keyframes tab-enter { from { opacity: 0; transform: translateY(6px); } }
+
+/* A badge pops when its number changes. */
+.badge-pop { animation: badge-pop 220ms var(--ease-out); }
+@keyframes badge-pop { from { transform: rotate(8deg) scale(0.8); opacity: 0.4; } }
+.nav-wrap [class*="ml-auto"].badge-pop { animation-name: badge-pop-flat; }
+@keyframes badge-pop-flat { from { transform: scale(0.8); opacity: 0.4; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter { animation-name: fade-in; }
+  .badge-pop, .nav-wrap [class*="ml-auto"].badge-pop { animation-name: fade-in; }
+}
 
 @media (min-width: 768px) {
   .brief-clip .brief-frame__canvas { aspect-ratio: 16 / 9; }

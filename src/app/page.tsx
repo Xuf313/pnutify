@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarDays, ListTodo, Newspaper, Settings, Sunrise } from "lucide-react";
-import { AppLogo, cn, Toast } from "@/components/ui";
+import { AppLogo, Toast } from "@/components/ui";
+import { Nav } from "@/components/Nav";
 import { BriefingTab } from "@/components/BriefingTab";
 import { NoticesTab } from "@/components/NoticesTab";
 import { TasksTab, type TaskActions } from "@/components/TasksTab";
@@ -137,6 +138,12 @@ function App() {
   const [alerts, setAlertsState] = useState<AlertCategories>(NO_ALERTS);
   const [alertsReady, setAlertsReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** The last tab change came from a keyboard shortcut: switch instantly, without motion. */
+  const [instantTab, setInstantTab] = useState(false);
+  const goTab = useCallback((t: Tab) => {
+    setInstantTab(false);
+    setTab(t);
+  }, []);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [ownerHint] = useState(() => read<boolean>(KEYS.ownerHint, false));
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -645,14 +652,20 @@ function App() {
     setSettingsSection(section ?? null);
     setSettingsOpen(true);
   }, []);
-  const addTask = useCallback((day: string | null = null) => {
-    setTaskDraft({ day, n: Date.now() });
-    setTab("tasks");
-  }, []);
-  const openCalendarDay = useCallback((day: string) => {
-    setCalendarFocus({ day, n: Date.now() });
-    setTab("calendar");
-  }, []);
+  const addTask = useCallback(
+    (day: string | null = null) => {
+      setTaskDraft({ day, n: Date.now() });
+      goTab("tasks");
+    },
+    [goTab],
+  );
+  const openCalendarDay = useCallback(
+    (day: string) => {
+      setCalendarFocus({ day, n: Date.now() });
+      goTab("calendar");
+    },
+    [goTab],
+  );
 
   // ---------- keyboard shortcuts: / search, n new task, 1-4 sections ----------
   useEffect(() => {
@@ -662,13 +675,16 @@ function App() {
       if (el?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
       if (e.key === "/") {
         e.preventDefault();
+        setInstantTab(true);
         setTab("notices");
         // The list renders for phone and desktop; focus the one that's showing.
         setTimeout(() => [...document.querySelectorAll<HTMLInputElement>("#notice-search")].find((x) => x.offsetParent !== null)?.focus(), 30);
       } else if (e.key === "n") {
         e.preventDefault();
         addTask();
+        setInstantTab(true);
       } else if (/^[1-4]$/.test(e.key)) {
+        setInstantTab(true);
         setTab(NAV[Number(e.key) - 1].id);
       }
     };
@@ -711,7 +727,7 @@ function App() {
   const pendingCount = useMemo(() => visibleTasks.filter((t) => t.status === "pending").length, [visibleTasks]);
 
   const content = (
-    <>
+    <div key={tab} className={instantTab ? undefined : "tab-enter"}>
       {tab === "briefing" && (
         <BriefingTab
           now={now}
@@ -730,7 +746,7 @@ function App() {
           canInstall={Boolean(installPrompt)}
           onOpenNotice={openNotice}
           onToggleTask={taskActions.toggle}
-          goTo={setTab}
+          goTo={goTab}
           openSettings={openSettings}
           openCalendarDay={openCalendarDay}
           addTask={() => addTask()}
@@ -771,7 +787,7 @@ function App() {
       {tab === "calendar" && (
         <CalendarTab key={calendarFocus?.n ?? "calendar"} now={now} tasks={visibleTasks} onToggleTask={taskActions.toggle} onAddTask={(day) => addTask(day)} focusDay={calendarFocus?.day} />
       )}
-    </>
+    </div>
   );
 
   const badge = (id: Tab) => (id === "notices" ? unreadCount : id === "tasks" ? pendingCount : 0);
@@ -807,29 +823,8 @@ function App() {
           style={{ paddingBottom: "max(0.9rem, env(safe-area-inset-bottom))" }}
           aria-label="Sections"
         >
-          <div className="cozy-card bg-card p-1.5 flex rounded-3xl">
-            {NAV.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                aria-current={tab === id ? "page" : undefined}
-                className={cn(
-                  "nav-tab relative flex-1 flex flex-col items-center gap-0.5 py-2 rounded-2xl border-2",
-                  // The active tab is a raised button, like the cards; tapping presses it down.
-                  tab === id
-                    ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-x-px -translate-y-px"
-                    : "border-transparent text-muted-foreground",
-                )}
-              >
-                <Icon size={22} />
-                <span className="text-[11px] font-extrabold">{label}</span>
-                {badge(id) > 0 && (
-                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-secondary text-secondary-foreground text-[11px] font-extrabold tabular-nums flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
-                    {badge(id) > 99 ? "99+" : badge(id)}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="cozy-card bg-card p-1.5 rounded-3xl">
+            <Nav variant="bar" items={NAV} active={tab} onSelect={goTab} badge={badge} instant={instantTab} />
           </div>
         </nav>
       </div>
@@ -846,33 +841,8 @@ function App() {
             <p className="text-xs font-bold text-muted-foreground mt-3">{formatDate(now, { weekday: "long" })}</p>
             <p className="text-2xl font-extrabold tabular-nums text-primary">{formatDate(now, { month: "short", day: "numeric" })}</p>
           </div>
-          <nav className="flex-1 px-4 py-6 flex flex-col gap-2" aria-label="Sections">
-            {NAV.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                aria-current={tab === id ? "page" : undefined}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm border-2 transition-all",
-                  tab === id
-                    ? "bg-primary text-primary-foreground border-border shadow-[3px_3px_0px_var(--color-border)] -translate-y-0.5"
-                    : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                )}
-              >
-                <Icon size={20} />
-                <span>{label}</span>
-                {badge(id) > 0 && (
-                  <span
-                    className={cn(
-                      "ml-auto text-[11px] font-extrabold tabular-nums px-1.5 py-0.5 rounded-md border",
-                      tab === id ? "bg-primary-foreground/20 border-primary-foreground/30" : "bg-primary text-primary-foreground border-border",
-                    )}
-                  >
-                    {badge(id)}
-                  </span>
-                )}
-              </button>
-            ))}
+          <nav className="flex-1 px-4 py-6" aria-label="Sections">
+            <Nav variant="side" items={NAV} active={tab} onSelect={goTab} badge={badge} instant={instantTab} />
           </nav>
           <div className="px-4 py-5 border-t-2 border-dashed border-border/30">
             <button
