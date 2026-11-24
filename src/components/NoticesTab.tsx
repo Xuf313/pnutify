@@ -26,6 +26,8 @@ type Props = {
   alertsReady: boolean;
   onOpenNotice: (id: string) => void;
   onMarkRead: (ids: string[], value?: boolean) => void;
+  /** Marks these read, with an Undo. */
+  onMarkAllRead: (ids: string[]) => void;
   onRetry: () => void;
   openSettings: () => void;
 };
@@ -80,26 +82,42 @@ export function NoticesTab(p: Props) {
         )}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pt-1 pb-1.5" role="tablist" aria-label="Notice board">
+      <div
+        className="flex gap-2 overflow-x-auto -mx-1 px-1 pt-1 pb-1.5"
+        role="tablist"
+        aria-label="Notice board"
+        onKeyDown={(e) => {
+          // Arrow keys move between boards, like any tab list.
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+          const tabs = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+          const i = tabs.indexOf(document.activeElement as HTMLButtonElement);
+          if (i < 0) return;
+          e.preventDefault();
+          const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+          next.focus();
+          next.click();
+        }}
+      >
         {(["all", ...p.boards] as Filter[]).map((f) => (
           <button
             key={f}
             role="tab"
             aria-selected={filter === f}
+            tabIndex={filter === f ? 0 : -1}
             onClick={() => {
               setFilter(f);
               setLimit(PAGE);
             }}
             className={cn(
-              "flex-1 min-w-fit whitespace-nowrap flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-extrabold border-2 transition-all",
+              "flex-1 min-w-fit whitespace-nowrap flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-extrabold border-2 border-border transition-[background-color,color,transform,box-shadow] duration-150 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
               filter === f
-                ? "bg-foreground text-background border-foreground shadow-[3px_3px_0px_var(--color-primary)] -translate-y-0.5"
-                : "bg-card text-muted-foreground border-border shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted",
+                ? "bg-primary text-primary-foreground shadow-[3px_3px_0px_var(--color-border)] -translate-y-0.5"
+                : "bg-card text-muted-foreground shadow-[2px_2px_0px_var(--color-border)] hover:bg-muted",
             )}
           >
             {f !== "all" && <BoardIcon source={f} size={15} className="hidden min-[360px]:inline shrink-0" />}
             {f === "all" ? "All" : boardInfo(f)?.short ?? f}
-            {(counts[f] ?? 0) > 0 && <span className="text-[10px] opacity-70">{counts[f]}</span>}
+            {(counts[f] ?? 0) > 0 && <span className="text-[11px] tabular-nums opacity-80">{counts[f]}</span>}
           </button>
         ))}
       </div>
@@ -109,6 +127,8 @@ export function NoticesTab(p: Props) {
           <span className="sr-only">Search notices</span>
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
+            id="notice-search"
+            aria-keyshortcuts="/"
             type="search"
             value={query}
             onChange={(e) => {
@@ -116,7 +136,7 @@ export function NoticesTab(p: Props) {
               setLimit(PAGE);
             }}
             placeholder="Search notices"
-            className="w-full bg-card border-2 border-border rounded-xl pl-9 pr-9 py-2 text-sm font-bold focus:outline-none focus:border-primary"
+            className="w-full bg-card border-2 border-border rounded-xl pl-9 pr-9 py-2 text-base sm:text-sm font-bold"
           />
           {query && (
             <button onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground" aria-label="Clear search">
@@ -141,7 +161,7 @@ export function NoticesTab(p: Props) {
       )}
 
       {unreadInView.length > 1 && (
-        <button onClick={() => p.onMarkRead(unreadInView.map((n) => n.id))} className="self-end text-sm font-bold text-primary flex items-center gap-1.5 hover:underline">
+        <button onClick={() => p.onMarkAllRead(unreadInView.map((n) => n.id))} className="self-end text-sm font-bold text-primary flex items-center gap-1.5 hover:underline">
           <CheckCheck size={16} /> Mark {unreadInView.length} as read
         </button>
       )}
@@ -167,13 +187,16 @@ export function NoticesTab(p: Props) {
           {filtered.slice(0, limit).map((n) => {
             const isRead = p.readIds.has(n.id);
             return (
-              <li key={n.id} className={cn("cozy-card bg-card flex items-stretch", isRead && "opacity-65 border-dashed shadow-none")}>
-                <button onClick={() => p.onOpenNotice(n.id)} className="flex-1 min-w-0 text-left p-3.5 flex gap-3 items-start">
+              <li key={n.id} className={cn("cozy-card pressable bg-card flex items-stretch", isRead && "opacity-65 border-dashed shadow-none")}>
+                <button onClick={() => p.onOpenNotice(n.id)} className="press-target flex-1 min-w-0 text-left p-3.5 flex gap-3 items-start">
                   <span className="w-9 h-9 rounded-xl bg-background border-2 border-border flex items-center justify-center shrink-0" aria-hidden>
-                    <BoardIcon source={n.source} size={16} className={n.source === "cse" ? "text-secondary" : "text-primary"} />
+                    <BoardIcon source={n.source} size={16} className="text-primary" />
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className={cn("block font-bold text-foreground leading-snug", isRead && "font-semibold")}>{n.title}</span>
+                    <span className={cn("block font-bold text-foreground leading-snug", isRead && "font-semibold")}>
+                      {n.title}
+                      {isRead && <span className="sr-only"> (read)</span>}
+                    </span>
                     <span className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       {!isRead && isNewNotice(n, p.now) && <Pill tone="primary">New</Pill>}
                       {n.pinned && (

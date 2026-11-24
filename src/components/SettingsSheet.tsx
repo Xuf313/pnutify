@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, BookOpen, CircleCheck, Copy, Link2, Newspaper, Download, ExternalLink, KeyRound, LogOut, Palette, RefreshCw, Send, Share, ShieldCheck, Smartphone, SquarePlus, Stethoscope, TriangleAlert } from "lucide-react";
 import { cn, Sheet, Switch } from "./ui";
 import { anyAlertOn, isIOS, isStandalone, pushSupport, sendTest } from "@/lib/client/push";
@@ -13,9 +13,15 @@ import type { CalendarView } from "@/lib/client/platoCalendar";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
+export type SettingsSection = "alerts" | "install" | "plato";
+
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Scroll to this section when the sheet opens (e.g. from a Briefing card). */
+  focusSection?: SettingsSection | null;
+  /** Show the owner sign-in (only after visiting with ?owner, so students don't see it). */
+  showOwnerSignIn?: boolean;
   theme: Theme;
   setTheme: (t: Theme) => void;
   alerts: AlertCategories;
@@ -93,6 +99,13 @@ export function SettingsSheet(p: Props) {
     setBusy(null);
   };
 
+  useEffect(() => {
+    if (!p.open || !p.focusSection) return;
+    // After the sheet has mounted and laid out.
+    const t = setTimeout(() => document.getElementById(`settings-${p.focusSection}`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+    return () => clearTimeout(t);
+  }, [p.open, p.focusSection]);
+
   const unsupportedText =
     !support.ok &&
     {
@@ -106,8 +119,8 @@ export function SettingsSheet(p: Props) {
     <Sheet open={p.open} onClose={p.onClose} title="Settings">
       <div className="flex flex-col gap-7">
         {/* ---------- alerts ---------- */}
-        <section>
-          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+        <section id="settings-alerts" className="scroll-mt-4">
+          <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-3">
             <Bell size={18} className="text-primary" /> Alerts
           </h3>
           {unsupportedText ? (
@@ -144,7 +157,7 @@ export function SettingsSheet(p: Props) {
 
         {/* ---------- boards ---------- */}
         <section>
-          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+          <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-1">
             <Newspaper size={18} className="text-primary" /> Boards
           </h3>
           <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
@@ -162,8 +175,8 @@ export function SettingsSheet(p: Props) {
 
         {/* ---------- install ---------- */}
         {!isStandalone() && (
-          <section>
-            <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+          <section id="settings-install" className="scroll-mt-4">
+            <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-3">
               <Smartphone size={18} className="text-primary" /> Add to home screen
             </h3>
             {p.installPrompt ? (
@@ -198,7 +211,7 @@ export function SettingsSheet(p: Props) {
 
         {/* ---------- theme ---------- */}
         <section>
-          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+          <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-3">
             <Palette size={18} className="text-primary" /> Theme
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -221,7 +234,7 @@ export function SettingsSheet(p: Props) {
 
         {/* ---------- privacy ---------- */}
         <section>
-          <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+          <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-3">
             <ShieldCheck size={18} className="text-primary" /> Privacy
           </h3>
           <ul className="text-sm text-muted-foreground flex flex-col gap-1.5 list-disc pl-5">
@@ -237,7 +250,7 @@ export function SettingsSheet(p: Props) {
               } catch {}
               window.location.reload();
             }}
-            className="mt-3 text-sm font-bold text-[#E5484D] hover:underline"
+            className="mt-3 text-sm font-bold text-danger hover:underline"
           >
             Delete all my data on this device
           </button>
@@ -249,7 +262,7 @@ export function SettingsSheet(p: Props) {
             Send feedback <ExternalLink size={11} />
           </a>
         </p>
-        {!p.isOwner && <OwnerSignIn unlock={p.ownerActions.unlock} />}
+        {!p.isOwner && p.showOwnerSignIn && <OwnerSignIn unlock={p.ownerActions.unlock} />}
       </div>
     </Sheet>
   );
@@ -268,7 +281,7 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
   const nespa = data?.nespa;
   return (
     <section>
-      <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-3">
+      <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-3">
         <BookOpen size={18} className="text-primary" /> PLATO & NESPA
       </h3>
       <p className="text-sm text-muted-foreground mb-2">This device is signed in as the owner. Only owner devices can see this.</p>
@@ -307,7 +320,7 @@ function OwnerSection({ data, actions }: { data: OwnerData | null; actions: Prop
           onClick={() => {
             if (window.confirm("Sign this device out of owner mode? PLATO and NESPA will disappear from it.")) actions.lock();
           }}
-          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 text-[#E5484D]"
+          className="cozy-btn bg-card px-3 py-2 text-sm font-extrabold flex items-center gap-1.5 text-danger"
         >
           <LogOut size={15} /> Sign out this device
         </button>
@@ -394,13 +407,13 @@ function AlertsCheck() {
       <button onClick={run} disabled={state === "loading"} className="text-sm font-bold text-primary flex items-center gap-1.5 hover:underline disabled:opacity-50">
         <Stethoscope size={15} /> {state === "loading" ? "Checking…" : status ? "Check alerts again" : "Why didn't I get an alert? Check now"}
       </button>
-      {state === "error" && <p className="mt-2 text-sm font-bold text-[#E5484D]">Couldn&apos;t run the check. Try again in a moment.</p>}
+      {state === "error" && <p className="mt-2 text-sm font-bold text-danger">Couldn&apos;t run the check. Try again in a moment.</p>}
       {status && (
         <div className="mt-3 flex flex-col gap-2">
           <ul className="flex flex-col gap-2">
             {lines.map((l) => (
               <li key={l.text} className="flex gap-2 text-sm">
-                {l.ok ? <CircleCheck size={16} className="text-secondary shrink-0 mt-0.5" /> : <TriangleAlert size={16} className="text-[#E5484D] shrink-0 mt-0.5" />}
+                {l.ok ? <CircleCheck size={16} className="text-secondary shrink-0 mt-0.5" /> : <TriangleAlert size={16} className="text-danger shrink-0 mt-0.5" />}
                 <span>
                   <span className="font-bold text-foreground">{l.text}</span>
                   {l.fix && <span className="block text-muted-foreground font-bold">{l.fix}</span>}
@@ -510,7 +523,7 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
 
   return (
     <section>
-      <h3 className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+      <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-1">
         <Link2 size={18} className="text-primary" /> Sync across devices
       </h3>
       {code ? (
@@ -537,7 +550,7 @@ function SyncSection({ code, actions }: { code: string | null; actions: Props["s
                 if (!window.confirm("Delete the synced copy? Your other devices will stop syncing too. Each keeps its own data.")) return;
                 await actions.wipe();
               }}
-              className="text-sm font-bold text-[#E5484D] hover:underline"
+              className="text-sm font-bold text-danger hover:underline"
             >
               Delete synced data
             </button>

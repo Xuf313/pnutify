@@ -18,15 +18,19 @@ test.describe('Briefing', () => {
     await expect(img).toHaveClass(/is-loaded/);
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 
-    // Dateline, then the painting's caption, then the summary line.
+    // Dateline, then the summary line (before the painting, so it's on the first screen), then the caption.
     const order = await brief.locator('header p').evaluateAll((ps) => ps.map((p) => p.className));
-    expect(order).toEqual(['brief-dateline', 'brief-caption', 'brief-blurb']);
+    expect(order).toEqual(['brief-dateline', 'brief-blurb', 'brief-caption']);
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
     await noSidewaysScroll(page);
+
+    // The count in the summary line goes to Notices.
+    await brief.locator('.brief-blurb').getByRole('button', { name: /new notice/ }).click();
+    await expect(visible(page, 'main').getByRole('heading', { name: 'Notices' })).toBeVisible();
   });
 });
 
@@ -88,6 +92,31 @@ test.describe('Tasks', () => {
     await page.reload();
     await expect(visible(page, 'main').getByText('OS homework 3')).toHaveCount(0);
   });
+
+  test('deleting a task can be undone', async ({ page }) => {
+    await page.goto('/?tab=tasks');
+    const main = visible(page, 'main');
+    await main.getByRole('button', { name: /^Add$/ }).click();
+    await main.getByLabel("What's due").fill('Lab report');
+    await main.getByRole('button', { name: 'Add task' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Added "Lab report"' })).toBeVisible();
+
+    // Delete lives in the edit form, not next to the pencil.
+    await main.getByRole('button', { name: 'Edit "Lab report"' }).click();
+    await main.getByRole('button', { name: 'Delete' }).click();
+    await expect(main.getByText('Lab report')).toHaveCount(0);
+    await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+    await expect(main.getByText('Lab report')).toBeVisible();
+  });
+
+  test('the Calendar adds a task on the chosen day', async ({ page }) => {
+    await page.goto('/?tab=calendar');
+    const main = visible(page, 'main');
+    await main.getByRole('button', { name: /Add a task for this day/ }).click();
+    await expect(main.getByLabel("What's due")).toBeFocused();
+    const today = await page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date()));
+    await expect(main.getByLabel('Due (KST)')).toHaveValue(today);
+  });
 });
 
 test.describe('Settings and privacy', () => {
@@ -98,8 +127,13 @@ test.describe('Settings and privacy', () => {
 
     await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Owner sign-in')).toBeVisible();
+    // Students don't see the owner sign-in; the owner opens PNUtify once with ?owner.
+    await expect(dialog.getByText('Owner sign-in')).toHaveCount(0);
     await expect(dialog.getByRole('heading', { name: 'PLATO & NESPA' })).toHaveCount(0);
+
+    await page.goto('/?owner');
+    await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
+    await expect(page.getByRole('dialog').getByText('Owner sign-in')).toBeVisible();
   });
 
   test('the server refuses owner data to a visitor', async ({ request }) => {
