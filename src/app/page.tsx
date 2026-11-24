@@ -708,11 +708,7 @@ function App() {
   const shownNotices = useMemo(() => notices.filter((n) => boards.includes(n.source)), [notices, boards]);
   const unreadCount = useMemo(() => shownNotices.filter((n) => !readIds.has(n.id)).length, [shownNotices, readIds]);
   const visibleTasks = useMemo(() => (hiddenTasks.size ? allTasks.filter((t) => !hiddenTasks.has(t.id)) : allTasks), [allTasks, hiddenTasks]);
-  // The Tasks badge means "act now": overdue or due today only.
-  const urgentCount = useMemo(() => {
-    const today = kstDay(now);
-    return visibleTasks.filter((t) => t.status === "pending" && (t.dueDate < now || kstDay(t.dueDate) === today)).length;
-  }, [visibleTasks, now]);
+  const pendingCount = useMemo(() => visibleTasks.filter((t) => t.status === "pending").length, [visibleTasks]);
 
   const content = (
     <>
@@ -778,7 +774,7 @@ function App() {
     </>
   );
 
-  const badge = (id: Tab) => (id === "notices" ? unreadCount : id === "tasks" ? urgentCount : 0);
+  const badge = (id: Tab) => (id === "notices" ? unreadCount : id === "tasks" ? pendingCount : 0);
 
   return (
     <div className="font-sans selection:bg-primary/20 selection:text-foreground min-h-[100dvh]">
@@ -828,7 +824,7 @@ function App() {
                 <Icon size={22} />
                 <span className="text-[11px] font-extrabold">{label}</span>
                 {badge(id) > 0 && (
-                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-soon text-soon-foreground text-[11px] font-extrabold tabular-nums flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
+                  <span className="absolute -top-1.5 right-[16%] min-w-5 h-5 px-1 rounded-md bg-secondary text-secondary-foreground text-[11px] font-extrabold tabular-nums flex items-center justify-center border-2 border-border shadow-[1.5px_1.5px_0px_var(--color-border)] rotate-[8deg]">
                     {badge(id) > 99 ? "99+" : badge(id)}
                   </span>
                 )}

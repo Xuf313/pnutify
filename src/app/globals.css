@@ -21,17 +21,12 @@
   --color-muted: var(--t-muted);
   --color-muted-foreground: var(--t-muted-fg);
   --color-border: var(--t-border);
-  /* "Due soon" is warm amber; green is kept for done and read. */
-  --color-soon: var(--t-soon);
-  --color-soon-foreground: var(--t-soon-fg);
   --color-danger: var(--t-danger);
   --color-danger-foreground: var(--t-danger-fg);
 }
 
 /* Shared by the light themes; Night overrides them. */
 :root {
-  --t-soon: #FFC53D;
-  --t-soon-fg: #2A1F00;
   --t-danger: #CE2C31;
   --t-danger-fg: #FFFFFF;
 }
@@ -146,8 +141,6 @@
   --t-grid-color: rgba(111, 155, 255, 0.06);
   --t-washi: rgba(61, 203, 134, 0.8);
   --t-washi-fg: #0D1424;
-  --t-soon: #F5B83D;
-  --t-soon-fg: #0D1424;
   --t-danger: #FF7A7F;
   --t-danger-fg: #0D1424;
   color-scheme: dark;
@@ -493,7 +486,7 @@ body {
   border: 2px solid var(--color-border); border-radius: 6px; box-shadow: 2px 2px 0 var(--color-border);
   transform: rotate(-3deg);
 }
-.dday--soon { background: var(--color-soon); color: var(--color-soon-foreground); }
+.dday--soon { background: var(--t-washi); color: #fff; }
 .dday--today { background: var(--color-primary); color: var(--color-primary-foreground); transform: rotate(3deg); }
 .dday--over { background: var(--color-danger); color: var(--color-danger-foreground); }
 
