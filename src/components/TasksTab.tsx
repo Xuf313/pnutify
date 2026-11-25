@@ -1,21 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Check, ExternalLink, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn, DdaySticker, EmptyState } from "./ui";
 import { addDays, formatDue, fromKst, kstDay } from "@/lib/client/time";
 import type { AlertCategories, Task } from "@/lib/client/types";
 
-type Actions = {
+export type TaskActions = {
   add: (t: Omit<Task, "id" | "status" | "createdAt">) => void;
   update: (id: string, patch: Partial<Task>) => void;
   toggle: (id: string) => void;
+  /** Deletes an own task (with an Undo). */
   remove: (id: string) => void;
   /** Clears these finished items from the list (own tasks are deleted; PLATO/NESPA items are hidden). */
   clearCompleted: (ids: string[]) => void;
+  /** Moves an overdue task to tomorrow, same time. */
+  postpone: (id: string) => void;
 };
 
-type Props = { now: number; tasks: Task[]; actions: Actions; alerts: AlertCategories; openSettings: () => void; /** Owner mode: tasks sync across devices. */ synced?: boolean };
+type Props = {
+  now: number;
+  tasks: Task[];
+  actions: TaskActions;
+  alerts: AlertCategories;
+  openSettings: () => void;
+  /** Owner mode: tasks sync across devices. */
+  synced?: boolean;
+  /** Open the add form straight away, due on this day ("YYYY-MM-DD"), e.g. from the Calendar. */
+  draft?: { day: string | null } | null;
+  onDraftDone?: () => void;
+};
 
 const isExternal = (t: Task) => t.source === "plato" || t.source === "nespa";
 
@@ -25,8 +39,11 @@ function kstTime(t: number): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t);
 }
 
-export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: Props) {
-  const [adding, setAdding] = useState(false);
+/** Group labels: small, in the text font so they stay easy to read. */
+const groupLabel = "text-xs font-extrabold uppercase tracking-wider";
+
+export function TasksTab({ now, tasks, actions, alerts, openSettings, synced, draft, onDraftDone }: Props) {
+  const [adding, setAdding] = useState(Boolean(draft));
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const pending = useMemo(() => tasks.filter((t) => t.status === "pending").sort((a, b) => a.dueDate - b.dueDate), [tasks]);
@@ -41,17 +58,25 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
   push("This week", pending.filter((t) => t.dueDate >= now && kstDay(t.dueDate) !== today && t.dueDate < now + 7 * DAY));
   push("Later", pending.filter((t) => t.dueDate >= now + 7 * DAY));
 
+  const closeForm = () => {
+    setAdding(false);
+    onDraftDone?.();
+  };
+
   return (
     <div className="flex flex-col gap-5 pb-4">
       <div className="flex items-end justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-pixel text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-sm font-bold text-muted-foreground">{pending.length} to do · {synced ? "synced across your devices" : "saved on this device"}</p>
+          <p className="text-sm font-bold text-muted-foreground">
+            {pending.length} to do · {synced ? "synced across your devices" : "saved on this device"}
+          </p>
         </div>
         <button
-          onClick={() => setAdding((v) => !v)}
-          className="cozy-btn bg-primary text-primary-foreground font-pixel font-bold px-3 py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+          onClick={() => (adding ? closeForm() : setAdding(true))}
+          className="cozy-btn bg-primary text-primary-foreground font-pixel text-lg font-bold px-3 py-1.5 flex items-center gap-1.5 shrink-0 whitespace-nowrap"
           aria-expanded={adding}
+          aria-keyshortcuts="n"
         >
           {adding ? <X size={18} /> : <Plus size={18} />} {adding ? "Close" : "Add"}
         </button>
@@ -66,12 +91,13 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
         <TaskForm
           now={now}
           courses={courses}
+          initialDay={draft?.day ?? undefined}
           submitLabel="Add task"
           onSubmit={(t) => {
             actions.add(t);
-            setAdding(false);
+            closeForm();
           }}
-          onCancel={() => setAdding(false)}
+          onCancel={closeForm}
         />
       )}
 
@@ -84,9 +110,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
       ) : (
         groups.map((g) => (
           <section key={g.label}>
-            <h2 className={cn("font-pixel text-sm font-bold uppercase tracking-wider mb-2", g.label === "Overdue" ? "text-[#E5484D]" : "text-muted-foreground")}>
-              {g.label}
-            </h2>
+            <h2 className={cn(groupLabel, "mb-2", g.label === "Overdue" ? "text-danger" : "text-muted-foreground")}>{g.label}</h2>
             <ul className="flex flex-col gap-2.5">
               {g.items.map((t) =>
                 editingId === t.id ? (
@@ -101,10 +125,14 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
                         setEditingId(null);
                       }}
                       onCancel={() => setEditingId(null)}
+                      onDelete={() => {
+                        setEditingId(null);
+                        actions.remove(t.id);
+                      }}
                     />
                   </li>
                 ) : (
-                  <TaskItem key={t.id} task={t} now={now} onToggle={actions.toggle} onEdit={() => setEditingId(t.id)} onDelete={() => actions.remove(t.id)} />
+                  <TaskItem key={t.id} task={t} now={now} onToggle={actions.toggle} onEdit={() => setEditingId(t.id)} onPostpone={() => actions.postpone(t.id)} />
                 ),
               )}
             </ul>
@@ -115,7 +143,7 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
       {completed.length > 0 && (
         <section className="mt-2">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-pixel text-sm font-bold uppercase tracking-wider text-muted-foreground">Done ({completed.length})</h2>
+            <h2 className={cn(groupLabel, "text-muted-foreground")}>Done ({completed.length})</h2>
             <button onClick={() => actions.clearCompleted(completed.map((t) => t.id))} className="text-sm font-bold text-primary hover:underline">
               Clear done
             </button>
@@ -131,49 +159,75 @@ export function TasksTab({ now, tasks, actions, alerts, openSettings, synced }: 
   );
 }
 
-function TaskItem({ task, now, onToggle, onEdit, onDelete }: { task: Task; now: number; onToggle: (id: string) => void; onEdit?: () => void; onDelete: () => void }) {
+/**
+ * One task. Every row has exactly one action on the right (edit, open on PLATO, or delete when done),
+ * so the D-day stickers line up. Ticking it off shows the check for a moment before it moves to Done.
+ */
+function TaskItem({ task, now, onToggle, onEdit, onDelete, onPostpone }: { task: Task; now: number; onToggle: (id: string) => void; onEdit?: () => void; onDelete?: () => void; onPostpone?: () => void }) {
   const done = task.status === "completed";
+  const [ticking, setTicking] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const shownDone = done || ticking;
+  const overdue = !done && task.dueDate < now;
+  const toggle = () => {
+    if (done) return onToggle(task.id);
+    if (ticking) return;
+    setTicking(true);
+    timer.current = setTimeout(() => onToggle(task.id), 320);
+  };
+  const external = isExternal(task);
+
   return (
-    <li className={cn("cozy-card bg-card p-3 flex items-center gap-3", done && "opacity-60 border-dashed shadow-none")}>
+    <li className={cn("cozy-card bg-card p-3 flex items-center gap-3", done && "opacity-60 border-dashed shadow-none", ticking && "opacity-70")}>
       <button
-        onClick={() => onToggle(task.id)}
+        onClick={toggle}
         aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
         className={cn(
-          "w-7 h-7 rounded-lg border-2 border-border flex items-center justify-center shrink-0",
-          done ? "bg-secondary text-secondary-foreground" : "bg-background hover:bg-primary/15",
+          "w-8 h-8 rounded-lg border-2 border-border flex items-center justify-center shrink-0 transition-[background-color,transform] duration-150 active:scale-90",
+          shownDone ? "bg-secondary text-secondary-foreground" : "bg-background hover:bg-primary/15",
         )}
       >
-        {done && <Check size={16} strokeWidth={3.5} />}
+        {shownDone && <Check size={16} strokeWidth={3.5} className={cn(ticking && "check-pop")} />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={cn("font-bold text-foreground leading-snug", done && "line-through")}>{task.title}</p>
+        <p className={cn("font-bold text-foreground leading-snug", shownDone && "line-through")}>{task.title}</p>
         <p className="text-xs font-bold text-muted-foreground mt-0.5">
-          {isExternal(task) ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
+          {external ? `${task.source === "plato" ? "PLATO" : "NESPA"} · ` : ""}
           {task.course && task.course !== "General" && task.course !== "NESPA" ? `${task.course} · ` : ""}
-          {formatDue(task.dueDate, now)}
+          <span className="whitespace-nowrap">{formatDue(task.dueDate, now)}</span>
         </p>
+        {overdue && !external && onPostpone && (
+          <button onClick={onPostpone} className="mt-1.5 text-xs font-extrabold text-primary underline underline-offset-2 decoration-2 decoration-primary/40">
+            Move to tomorrow
+          </button>
+        )}
       </div>
-      {!done && (
-        <DdaySticker due={task.dueDate} now={now} />
-      )}
-      <div className="flex shrink-0">
-        {isExternal(task) ? (
+      {!done && <DdaySticker due={task.dueDate} now={now} />}
+      <div className="w-9 flex justify-center shrink-0">
+        {external ? (
           task.url && (
-            <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-muted" aria-label={`Open "${task.title}" on ${task.source === "plato" ? "PLATO" : "NESPA"}`}>
-              <ExternalLink size={16} />
+            <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-muted" aria-label={`Open "${task.title}" on ${task.source === "plato" ? "PLATO" : "NESPA"}`}>
+              <ExternalLink size={17} />
             </a>
           )
-        ) : (
-          <>
-            {onEdit && (
-              <button onClick={onEdit} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Edit "${task.title}"`}>
-                <Pencil size={16} />
-              </button>
-            )}
-            <button onClick={onDelete} className="p-1.5 rounded-md text-muted-foreground hover:text-[#E5484D] hover:bg-muted" aria-label={`Delete "${task.title}"`}>
-              <Trash2 size={16} />
+        ) : done ? (
+          onDelete && (
+            <button onClick={onDelete} className="p-2 rounded-md text-muted-foreground hover:text-danger hover:bg-muted" aria-label={`Delete "${task.title}"`}>
+              <Trash2 size={17} />
             </button>
-          </>
+          )
+        ) : (
+          onEdit && (
+            <button onClick={onEdit} className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Edit "${task.title}"`}>
+              <Pencil size={17} />
+            </button>
+          )
         )}
       </div>
     </li>
@@ -184,26 +238,32 @@ function TaskForm({
   now,
   courses,
   initial,
+  initialDay,
   submitLabel,
   onSubmit,
   onCancel,
+  onDelete,
 }: {
   now: number;
   courses: string[];
   initial?: Task;
+  initialDay?: string;
   submitLabel: string;
   onSubmit: (t: { title: string; course: string; dueDate: number }) => void;
   onCancel: () => void;
+  onDelete?: () => void;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [course, setCourse] = useState(initial?.course && initial.course !== "General" ? initial.course : "");
-  const [day, setDay] = useState(initial ? kstDay(initial.dueDate) : addDays(kstDay(now), 1));
+  const [day, setDay] = useState(initial ? kstDay(initial.dueDate) : initialDay ?? addDays(kstDay(now), 1));
   const [time, setTime] = useState(initial ? kstTime(initial.dueDate) : "23:59");
   const quick = [
     { label: "Today", day: kstDay(now) },
     { label: "Tomorrow", day: addDays(kstDay(now), 1) },
     { label: "In a week", day: addDays(kstDay(now), 7) },
   ];
+  const field = "bg-background border-2 border-border rounded-lg px-3 py-2 text-base sm:text-sm font-bold text-foreground";
+  const label = "text-xs font-extrabold text-muted-foreground uppercase tracking-wider";
 
   return (
     <form
@@ -213,28 +273,16 @@ function TaskForm({
         if (!title.trim() || Number.isNaN(due)) return;
         onSubmit({ title: title.trim().slice(0, 200), course: course.trim().slice(0, 80) || "General", dueDate: due });
       }}
+      onKeyDown={(e) => e.key === "Escape" && onCancel()}
       className="cozy-card bg-card p-4 border-dashed flex flex-col gap-3"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">What&apos;s due</span>
-        <input
-          autoFocus
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Data Structures HW 5"
-          className="bg-background border-2 border-border rounded-lg px-3 py-2 font-bold focus:outline-none focus:border-primary"
-        />
+        <span className={label}>What&apos;s due</span>
+        <input autoFocus required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Data Structures HW 5" className={cn(field, "sm:text-base")} />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Course (optional)</span>
-        <input
-          value={course}
-          onChange={(e) => setCourse(e.target.value)}
-          list="course-options"
-          placeholder="e.g. 자료구조"
-          className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-primary"
-        />
+        <span className={label}>Course (optional)</span>
+        <input value={course} onChange={(e) => setCourse(e.target.value)} list="course-options" placeholder="e.g. 자료구조" className={field} />
         <datalist id="course-options">
           {courses.map((c) => (
             <option key={c} value={c} />
@@ -243,25 +291,37 @@ function TaskForm({
       </label>
       <div className="flex flex-wrap gap-2 items-end">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Due (KST)</span>
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} required className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
+          <span className={label}>Due (KST)</span>
+          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} required className={field} />
         </label>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Due time" className="bg-background border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-foreground" />
+        <label className="flex flex-col gap-1">
+          <span className={label}>Time</span>
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={field} />
+        </label>
         <div className="flex gap-1.5">
           {quick.map((q) => (
             <button
               key={q.label}
               type="button"
               onClick={() => setDay(q.day)}
-              className={cn("px-2.5 py-1.5 rounded-lg border-2 text-xs font-bold", day === q.day ? "bg-foreground text-background border-foreground" : "border-border/40 text-muted-foreground")}
+              aria-pressed={day === q.day}
+              className={cn(
+                "px-2.5 py-2 rounded-lg border-2 text-xs font-bold transition-colors",
+                day === q.day ? "bg-primary text-primary-foreground border-border" : "border-border/40 text-muted-foreground hover:border-border",
+              )}
             >
               {q.label}
             </button>
           ))}
         </div>
       </div>
-      <div className="flex gap-2 justify-end">
-        <button type="button" onClick={onCancel} className="px-3 py-2 font-bold text-sm text-muted-foreground">
+      <div className="flex gap-2 items-center">
+        {onDelete && (
+          <button type="button" onClick={onDelete} className="mr-auto px-2 py-2 font-bold text-sm text-danger flex items-center gap-1.5 hover:underline">
+            <Trash2 size={15} /> Delete
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className={cn("px-3 py-2 font-bold text-sm text-muted-foreground", !onDelete && "ml-auto")}>
           Cancel
         </button>
         <button type="submit" className="cozy-btn bg-primary text-primary-foreground font-extrabold px-4 py-2 text-sm">

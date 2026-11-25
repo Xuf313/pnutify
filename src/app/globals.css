@@ -4,7 +4,10 @@
 @theme inline {
   /* Nunito for Latin; Korean (which Nunito doesn't have) in IBM Plex Sans KR, so it looks the same on every phone. */
   --font-sans: 'Nunito', 'IBM Plex Sans KR', sans-serif;
-  --font-pixel: 'Pixelify Sans', monospace;
+  /* Pixel lettering is for display sizes only (20px and up); Korean falls back to Plex, not a system monospace. */
+  --font-pixel: 'Pixelify Sans', 'IBM Plex Sans KR', sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
   --color-background: var(--t-background);
   --color-foreground: var(--t-foreground);
@@ -19,6 +22,14 @@
   --color-muted: var(--t-muted);
   --color-muted-foreground: var(--t-muted-fg);
   --color-border: var(--t-border);
+  --color-danger: var(--t-danger);
+  --color-danger-foreground: var(--t-danger-fg);
+}
+
+/* Shared by the light themes; Night overrides them. */
+:root {
+  --t-danger: #CE2C31;
+  --t-danger-fg: #FFFFFF;
 }
 
 /* ── Theme: PNU Blue (default) ── */
@@ -33,29 +44,31 @@
   --t-accent: #4A7FD4;
   --t-accent-fg: #FFFFFF;
   --t-muted: #D4E0F5;
-  --t-muted-fg: #5A6E99;
+  --t-muted-fg: #4A5C85;
   --t-border: #143F90;
   --t-grid-color: rgba(20, 63, 144, 0.08);
   --t-washi: rgba(0, 166, 81, 0.75);
+  --t-washi-fg: #0D1F3C;
 }
 
 /* ── Theme: Cherry Blossom (봄) ── */
 [data-theme="cherry"] {
-  --t-background: #FFF0F7;
   --t-background: #FCF5F7;
   --t-foreground: #3D212A;
   --t-card: #FFFFFF;
-  --t-primary: #D47E9B;
+  /* Deep enough for white text (4.7:1); the soft pink lives on in the tape and fills. */
+  --t-primary: #B4537A;
   --t-primary-fg: #FFFFFF;
   --t-secondary: #E8A3BA;
   --t-secondary-fg: #3D212A;
   --t-accent: #E08DA9;
   --t-accent-fg: #FFFFFF;
   --t-muted: #F2E5E9;
-  --t-muted-fg: #8C6572;
+  --t-muted-fg: #7A5260;
   --t-border: #965D70;
   --t-grid-color: rgba(150, 93, 112, 0.15);
   --t-washi: #D47E9B;
+  --t-washi-fg: #3D212A;
 }
 
 /* ── Theme: Purple (Twilight - iPhone 12 Style) ── */
@@ -64,8 +77,8 @@
   --t-foreground: #2B213D; 
   --t-card: #FFFFFF;
   
-  /* A slightly deeper violet so the date and icons remain readable on white */
-  --t-primary: #9B7ED4; 
+  /* Deep enough for white text on buttons and the active tab (5.5:1) */
+  --t-primary: #7656B8;
   --t-primary-fg: #FFFFFF; 
   
   /* The exact bright, vibrant iPhone 12 Purple for your badges and fills */
@@ -76,12 +89,13 @@
   --t-accent-fg: #FFFFFF;
   
   --t-muted: #EAE5F2;
-  --t-muted-fg: #73658C;
+  --t-muted-fg: #625478;
   
   /* Crisp, dark purple for the cozy UI outlines */
   --t-border: #735D96; 
   --t-grid-color: rgba(115, 93, 150, 0.15);
-  --t-washi: #9B7ED4; 
+  --t-washi: #9B7ED4;
+  --t-washi-fg: #2B213D;
 }
 
 /* ── Theme: Autumn (Maple / Pumpkin Spice) ── */
@@ -90,8 +104,8 @@
   --t-foreground: #3D261D; 
   --t-card: #FFFFFF;
   
-  /* A muted, cozy rust/terracotta instead of harsh bright orange */
-  --t-primary: #D48B68; 
+  /* A deeper rust, so white text on it stays readable (5.1:1) */
+  --t-primary: #A8573A;
   --t-primary-fg: #FFFFFF; 
   
   /* A lighter, soft peach-orange for badges/fills */
@@ -102,12 +116,13 @@
   --t-accent-fg: #FFFFFF;
   
   --t-muted: #F2E7E1;
-  --t-muted-fg: #8C6E61;
+  --t-muted-fg: #77594C;
   
   /* A darker, crisp warm brown for cozy UI outlines */
   --t-border: #966551; 
   --t-grid-color: rgba(150, 101, 81, 0.15);
-  --t-washi: #D48B68; 
+  --t-washi: #D48B68;
+  --t-washi-fg: #3D261D;
 }
 
 /* ── Theme: Night (dark) ── */
@@ -122,12 +137,22 @@
   --t-accent: #8FB0FF;
   --t-accent-fg: #0D1424;
   --t-muted: #263044;
-  --t-muted-fg: #9AA7C2;
+  --t-muted-fg: #A7B3CC;
   --t-border: #3A4A6B;
   --t-grid-color: rgba(111, 155, 255, 0.06);
   --t-washi: rgba(61, 203, 134, 0.8);
+  --t-washi-fg: #0D1424;
+  --t-danger: #FF7A7F;
+  --t-danger-fg: #0D1424;
   color-scheme: dark;
 }
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  caret-color: var(--t-primary);
+}
+
+::placeholder { color: var(--t-muted-fg); opacity: 1; }
 
 body {
   background-color: var(--t-background);
@@ -150,15 +175,19 @@ body {
     border: 2px solid var(--t-border);
     border-radius: 12px;
     box-shadow: 4px 4px 0px var(--t-border);
-    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out), opacity 200ms ease;
   }
 
-  .cozy-card.interactive:hover {
-    transform: translateY(-2px) translateX(-2px);
-    box-shadow: 6px 6px 0px var(--t-border);
+  @media (hover: hover) and (pointer: fine) {
+    .cozy-card.interactive:hover {
+      transform: translateY(-2px) translateX(-2px);
+      box-shadow: 6px 6px 0px var(--t-border);
+    }
   }
 
-  .cozy-card.interactive:active {
+  /* Pressing anywhere on a tappable card presses the whole card down, like the buttons. */
+  .cozy-card.interactive:active,
+  .cozy-card.pressable:has(.press-target:active) {
     transform: translateY(2px) translateX(2px);
     box-shadow: 2px 2px 0px var(--t-border);
   }
@@ -167,7 +196,7 @@ body {
     border: 2px solid var(--t-border);
     border-radius: 8px;
     box-shadow: 2px 2px 0px var(--t-border);
-    transition: all 0.1s ease;
+    transition: transform 100ms var(--ease-out), box-shadow 100ms var(--ease-out), background-color 150ms ease, color 150ms ease;
   }
 
   .cozy-btn:active {
@@ -179,7 +208,7 @@ body {
     background-color: var(--t-washi);
     border: 2px solid var(--t-border);
     box-shadow: 2px 2px 0px var(--t-border);
-    color: #ffffff;
+    color: var(--t-washi-fg);
   }
 }
 
@@ -197,25 +226,32 @@ body {
   outline-offset: 2px;
 }
 
+/* Reduced motion means gentler, not none: nothing moves, but fades and colour changes stay. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  *, *::before, *::after { transition-property: opacity, color, background-color, border-color !important; scroll-behavior: auto !important; }
+  .sheet-panel, .sheet-panel[data-state="closed"] { animation-name: fade-in !important; }
+  .sheet-panel[data-state="closed"] { animation-name: fade-out !important; }
 }
 
 .sheet-backdrop { animation: fade-in 0.15s ease-out; }
-.sheet-panel { animation: slide-up 0.2s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.sheet-backdrop[data-state="closed"] { animation: fade-out 0.15s ease-in forwards; }
+.sheet-panel { animation: slide-up 0.24s var(--ease-out); }
+.sheet-panel[data-state="closed"] { animation: slide-down 0.16s ease-in forwards; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes slide-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes slide-down { from { transform: none; opacity: 1; } to { transform: translateY(12px); opacity: 0; } }
+/* The grab bar on phone sheets (swipe down to close). */
+.sheet-handle { touch-action: none; }
+
+/* Undo / confirmation toast */
+.toast { animation: toast-in 0.22s var(--ease-out); }
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ══════════════════════════════════════════════════════════════
    Briefing: an editorial "daily brief" layout
    ══════════════════════════════════════════════════════════════ */
 .brief { max-width: 40rem; margin: 0 auto; color: var(--color-foreground); }
-
-.brief-edges {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--color-muted-foreground); padding: 0 0.25rem 0.5rem;
-}
 
 .brief-frame {
   position: relative; margin: 0; padding: 0.55rem;
@@ -233,13 +269,12 @@ body {
   opacity: 0; transition: opacity 0.6s ease, transform 8s ease;
 }
 .brief-frame__canvas img.is-loaded { opacity: 1; }
-.brief-frame:hover .brief-frame__canvas img { transform: scale(1.03); }
-.brief-frame__overlay {
-  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 1rem 1.15rem; color: #fff;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.18) 45%, transparent 70%);
+@media (hover: hover) and (pointer: fine) {
+  .brief-frame:hover .brief-frame__canvas img { transform: scale(1.03); }
 }
-.brief-the { font-family: var(--font-pixel); font-weight: 700; font-size: 1.05rem; line-height: 1; opacity: 0.92; }
+/* At night the painting shouldn't be the brightest thing on the screen. */
+[data-theme="night"] .brief-frame__canvas img { filter: brightness(0.82) saturate(0.9); }
+.brief-the { font-family: var(--font-pixel); font-weight: 700; font-size: 1.25rem; line-height: 1; opacity: 0.92; }
 .brief-day {
   font-family: var(--font-pixel); font-weight: 700; font-size: clamp(2.1rem, 9.5vw, 3rem);
   line-height: 1; letter-spacing: 0; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
@@ -249,6 +284,12 @@ body {
   font-family: var(--font-sans); font-weight: 800; font-size: 1.12rem; line-height: 1.4;
   margin: 0.6rem 0.25rem 0; color: var(--color-foreground); text-wrap: pretty;
 }
+/* The counts in the lead line go straight to their tab. */
+.brief-blurb button {
+  font: inherit; color: var(--color-primary); text-decoration: underline; text-decoration-thickness: 2px;
+  text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+.brief-blurb button:active { opacity: 0.7; }
 .brief-caption { font-size: 0.78rem; font-style: italic; color: var(--color-muted-foreground); margin: 0.9rem 0.25rem 0; }
 
 .brief-section { margin-top: 2.4rem; }
@@ -272,10 +313,14 @@ body {
   flex-shrink: 0; width: 5.6rem; height: 5.6rem; display: grid; place-items: center; text-align: center;
   background: var(--color-primary); color: var(--color-primary-foreground);
   clip-path: polygon(50% 0%, 61% 13%, 77% 6%, 79% 23%, 96% 25%, 89% 40%, 100% 52%, 88% 63%, 93% 79%, 76% 81%, 71% 97%, 57% 89%, 44% 100%, 36% 86%, 19% 92%, 18% 75%, 2% 69%, 10% 54%, 0% 41%, 13% 31%, 9% 15%, 26% 15%, 32% 0%, 45% 9%);
-  transform: rotate(-8deg); transition: transform 0.25s ease;
+  transform: rotate(-8deg); transition: transform 0.25s var(--ease-out);
   font-family: var(--font-sans); font-weight: 800; font-size: 0.85rem; line-height: 1.1;
 }
-.brief-star:hover, .brief-star:focus-visible { transform: rotate(4deg) scale(1.05); }
+.brief-star:focus-visible { transform: rotate(4deg) scale(1.05); }
+.brief-star:active { transform: rotate(-8deg) scale(0.94); transition-duration: 0.1s; }
+@media (hover: hover) and (pointer: fine) {
+  .brief-star:hover { transform: rotate(4deg) scale(1.05); }
+}
 .brief-star span { display: block; }
 
 /* to-dos */
@@ -288,7 +333,7 @@ body {
   width: 1.45rem; height: 1.45rem; flex-shrink: 0; margin-top: 0.1rem; border-radius: 0.4rem;
   border: 2px solid var(--color-border); background: var(--color-background);
   display: grid; place-items: center; color: var(--color-secondary-foreground);
-  transition: background 0.2s ease, transform 0.15s ease;
+  transition: background 0.2s ease, transform 0.15s var(--ease-out);
 }
 .brief-check:active { transform: scale(0.9); }
 .brief-check[aria-checked="true"] { background: var(--color-secondary); }
@@ -304,9 +349,11 @@ body {
 /* "New updates": numbered items */
 .brief-item { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.35rem; padding: 0.95rem 0.25rem; }
 .brief-item + .brief-item { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
-.brief-item__num { font-family: var(--font-pixel); font-weight: 700; font-size: 1.25rem; line-height: 1.05; color: var(--color-primary); }
+.brief-item__num { font-family: var(--font-sans); font-weight: 800; font-size: 1.2rem; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--color-primary); }
 .brief-item__title { font-weight: 800; line-height: 1.32; }
-.brief-item__title a:hover, .brief-item__title button:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .brief-item__title a:hover, .brief-item__title button:hover { text-decoration: underline; text-underline-offset: 3px; }
+}
 .brief-item.is-read .brief-item__title { font-weight: 700; color: var(--color-muted-foreground); }
 .brief-tag {
   display: inline-block; vertical-align: 2px; margin-left: 0.45rem; padding: 0.05rem 0.45rem;
@@ -314,21 +361,25 @@ body {
   border: 1.5px solid currentColor; border-radius: 999px; color: var(--color-muted-foreground);
 }
 .brief-tag--primary { color: var(--color-primary); }
-.brief-tag--secondary { color: var(--color-secondary); }
 .brief-item__text { font-size: 0.9rem; color: var(--color-muted-foreground); font-weight: 600; margin-top: 0.25rem; line-height: 1.45; }
 .brief-source {
   display: inline-flex; align-items: center; justify-content: center; vertical-align: -3px;
-  width: 1.15rem; height: 1.15rem; margin-left: 0.35rem; border-radius: 0.3rem;
+  width: 1.5rem; height: 1.5rem; margin-left: 0.4rem; border-radius: 0.35rem;
   border: 1.5px solid var(--color-border); background: var(--color-card); color: var(--color-primary);
-  transform: rotate(var(--tilt, -3deg)); transition: transform 0.2s ease;
+  transform: rotate(var(--tilt, -3deg)); transition: transform 0.2s var(--ease-out);
+  position: relative;
 }
-.brief-source:hover { transform: rotate(4deg) scale(1.15); }
+/* A bigger invisible target than the stamp itself, without crowding the title. */
+.brief-source::after { content: ""; position: absolute; inset: -0.45rem; }
+@media (hover: hover) and (pointer: fine) {
+  .brief-source:hover { transform: rotate(4deg) scale(1.15); }
+}
 
 /* "Your day" */
 .brief-day-card { border: 2px solid var(--color-border); border-radius: 1rem; background: var(--color-card); overflow: hidden; }
 .brief-slot { display: grid; grid-template-columns: 5.2rem 1fr; gap: 0.75rem; padding: 0.7rem 1rem; align-items: baseline; }
 .brief-slot + .brief-slot { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
-.brief-slot__time { font-family: var(--font-pixel); font-weight: 700; font-size: 0.95rem; color: var(--color-primary); }
+.brief-slot__time { font-family: var(--font-sans); font-weight: 800; font-size: 0.95rem; font-variant-numeric: tabular-nums; color: var(--color-primary); }
 .brief-slot__event { font-weight: 800; line-height: 1.3; }
 .brief-slot__event small { display: block; font-size: 0.8rem; font-weight: 700; color: var(--color-muted-foreground); }
 .brief-part { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-muted-foreground); padding: 0.6rem 1rem 0; }
@@ -338,10 +389,9 @@ body {
 .brief-footer__credit { font-family: var(--font-sans); font-weight: 700; font-size: 0.95rem; line-height: 1.5; color: var(--color-muted-foreground); text-wrap: balance; }
 .brief-footer__credit em { font-style: normal; font-weight: 800; color: var(--color-foreground); }
 .brief-footer__src { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-foreground); transform: rotate(var(--tilt, 0deg)); }
-.brief-footer__love { margin-top: 0.6rem; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; color: var(--color-muted-foreground); }
+.brief-footer__love { margin-top: 0.6rem; font-size: 0.8rem; font-weight: 800; color: var(--color-muted-foreground); }
 
 @media (prefers-reduced-motion: reduce) {
-  .brief-frame__canvas img, .brief-star, .brief-source, .brief-check { transition: none; }
   .brief-frame:hover .brief-frame__canvas img { transform: none; }
 }
 
@@ -381,10 +431,16 @@ body {
 }
 .tape--l { left: -18px; transform: rotate(-32deg); }
 .tape--r { right: -18px; transform: rotate(28deg); }
+/* Inset from the corners so the tape never covers the words. */
 .brief-dateline {
   display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
-  font-size: 0.74rem; font-weight: 800; color: var(--color-muted-foreground);
-  padding-bottom: 0.45rem; border-bottom: 2px solid var(--color-border);
+  font-size: 0.8rem; font-weight: 800; color: var(--color-muted-foreground);
+  padding: 0 2.4rem 0.45rem; border-bottom: 2px solid var(--color-border);
+}
+/* The app header already shows the date on phones, so the dateline names the university only. */
+@media (max-width: 767px) {
+  .brief-dateline { justify-content: center; }
+  .brief-dateline__date { display: none; }
 }
 .brief-clip .brief-the { display: block; text-align: center; margin-top: 0.7rem; color: var(--color-primary); opacity: 1; }
 .brief-clip .brief-day {
@@ -395,11 +451,20 @@ body {
 .brief-clip .brief-frame { box-shadow: none; padding: 0.4rem; border-radius: 0.5rem; }
 .brief-clip .brief-frame__canvas { border-radius: 0.3rem; }
 .brief-clip .brief-caption { margin: 0.55rem 0 0; }
-.brief-clip .brief-blurb { font-size: 1.25rem; line-height: 1.35; margin: 0.6rem 0 0; }
+.brief-clip .brief-blurb { font-size: 1.25rem; line-height: 1.35; margin: 0 0 0.9rem; }
+@media (max-width: 767px) {
+  .brief-clip .brief-day { font-size: clamp(2.1rem, 10vw, 2.6rem); margin-bottom: 0.75rem; }
+}
 
 /* Sections open with a rule, like the sections of a paper */
 .brief-section { border-top: 2px solid var(--color-border); padding-top: 0.9rem; }
 .brief-push + .brief-cols > :first-child .brief-section:first-child, .brief-cols .brief-section { margin-top: 2.4rem; }
+
+/* Phones and tablets: one column, with what's new before the to-do list. */
+@media (max-width: 1023px) {
+  .brief-cols { display: flex; flex-direction: column; }
+  .brief-cols > .brief-updates { order: -1; }
+}
 
 /* Desktop: two columns, with a column rule */
 @media (min-width: 1024px) {
@@ -417,17 +482,42 @@ body {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 3.1rem;
   /* Numbers in the rounded font: in the pixel font a small 2 reads like an 8. */
   padding: 0.12rem 0.45rem; font-family: var(--font-sans); font-weight: 800; font-size: 0.78rem; line-height: 1.2; letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
   background: var(--color-card); color: var(--color-foreground);
   border: 2px solid var(--color-border); border-radius: 6px; box-shadow: 2px 2px 0 var(--color-border);
   transform: rotate(-3deg);
 }
 .dday--soon { background: var(--t-washi); color: #fff; }
 .dday--today { background: var(--color-primary); color: var(--color-primary-foreground); transform: rotate(3deg); }
-.dday--over { background: #E5484D; color: #fff; }
+.dday--over { background: var(--color-danger); color: var(--color-danger-foreground); }
 
 /* The tab bar's active tab is a raised button that presses down */
-.nav-tab { transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease; }
+.nav-tab { transition: transform 0.1s var(--ease-out), box-shadow 0.1s var(--ease-out), background-color 0.15s ease, color 0.15s ease; }
 .nav-tab:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* The raised active tab slides to the tab you pick; its white label is clipped to it (see Nav.tsx). */
+.nav-pill { transition: transform 260ms var(--ease-in-out), translate 100ms var(--ease-out), box-shadow 100ms var(--ease-out); }
+.nav-active { transition: clip-path 260ms var(--ease-in-out); }
+.nav-wrap[data-instant] .nav-pill, .nav-wrap[data-instant] .nav-active { transition: none; }
+/* Pressing the active tab presses the pill down, like every other button. */
+.nav-active > * { transition: translate 100ms var(--ease-out); }
+.nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-pill { translate: 2px 2px; box-shadow: 0 0 0 var(--color-border); }
+.nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-active > * { translate: 2px 2px; }
+
+/* A tab's content settles in when you switch to it. */
+.tab-enter { animation: tab-enter 200ms var(--ease-out); }
+@keyframes tab-enter { from { opacity: 0; transform: translateY(6px); } }
+
+/* A badge pops when its number changes. */
+.badge-pop { animation: badge-pop 220ms var(--ease-out); }
+@keyframes badge-pop { from { transform: rotate(8deg) scale(0.8); opacity: 0.4; } }
+.nav-wrap [class*="ml-auto"].badge-pop { animation-name: badge-pop-flat; }
+@keyframes badge-pop-flat { from { transform: scale(0.8); opacity: 0.4; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter { animation-name: fade-in; }
+  .badge-pop, .nav-wrap [class*="ml-auto"].badge-pop { animation-name: fade-in; }
+}
 
 @media (min-width: 768px) {
   .brief-clip .brief-frame__canvas { aspect-ratio: 16 / 9; }
@@ -443,3 +533,7 @@ body {
 .brief-class__new { min-width: 0; font-size: 0.65rem; padding: 0.02rem 0.35rem; box-shadow: 1.5px 1.5px 0 var(--color-border); }
 .brief-class__summary { font-size: 0.92rem; font-weight: 600; line-height: 1.5; color: var(--color-muted-foreground); margin-top: 0.25rem; text-wrap: pretty; }
 .brief-class.is-read .brief-item__title { font-weight: 700; color: var(--color-muted-foreground); }
+
+/* A task's check pops in when it's ticked off */
+.check-pop { animation: check-pop 0.28s var(--ease-out); }
+@keyframes check-pop { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }

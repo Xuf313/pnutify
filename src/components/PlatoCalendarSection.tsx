@@ -43,8 +43,8 @@ export function PlatoCalendarSection({ calendar, actions }: { calendar: Calendar
   const upcoming = calendar ? calendar.deadlines.filter((d) => d.dueAt > now).length : 0;
 
   return (
-    <section aria-labelledby="plato-calendar">
-      <h3 id="plato-calendar" className="flex items-center gap-2 font-pixel font-bold text-foreground mb-1">
+    <section aria-labelledby="plato-calendar" id="settings-plato" className="scroll-mt-4">
+      <h3 id="plato-calendar" className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-1">
         <CalendarClock size={18} className="text-primary" /> PLATO deadlines
       </h3>
 
@@ -75,7 +75,7 @@ export function PlatoCalendarSection({ calendar, actions }: { calendar: Calendar
                 setMessage("Removed. PNUtify deleted the link and your PLATO deadlines.");
               }}
               disabled={busy !== null}
-              className="cozy-btn bg-card px-3 py-2 text-sm font-semibold flex items-center gap-1.5 text-muted-foreground disabled:opacity-50"
+              className="cozy-btn bg-card px-3 py-2 text-sm font-semibold flex items-center gap-1.5 text-danger disabled:opacity-50"
             >
               <Unlink size={15} /> Remove link
             </button>
@@ -118,7 +118,7 @@ export function PlatoCalendarSection({ calendar, actions }: { calendar: Calendar
               aria-label="PLATO calendar link"
               autoComplete="off"
               spellCheck={false}
-              className="flex-1 min-w-0 bg-background border border-border rounded-[10px] px-3 py-2 text-sm focus:outline-none focus:border-primary"
+              className="flex-1 min-w-0 bg-background border border-border rounded-[10px] px-3 py-2 text-base sm:text-sm"
             />
             <button type="submit" disabled={busy !== null || !url.trim()} className="cozy-btn bg-primary text-primary-foreground px-3.5 py-2 text-sm font-semibold shrink-0 disabled:opacity-50">
               {busy === "link" ? "Checking…" : "Link PLATO"}

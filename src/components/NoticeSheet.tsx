@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCheck, ExternalLink, Paperclip, Share2 } from "lucide-react";
+import { CheckCheck, ExternalLink, Languages, Paperclip, Share2 } from "lucide-react";
 import { Pill, Sheet } from "./ui";
 import type { Notice } from "@/lib/client/types";
 import { SOURCE_LABEL } from "@/lib/client/types";
@@ -19,7 +19,20 @@ type Props = {
 type Article = { title: string | null; html: string; attachments: { name: string; url: string }[]; author: string | null; date: string | null };
 type Detail = { id: string; ok: true; article: Article } | { id: string; ok: false };
 
-export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMarkRead }: Props) {
+const HANGUL = /[\uac00-\ud7a3]/;
+
+/** The original page through Google Translate, for students who don't read Korean. */
+const translateUrl = (url: string) => `https://translate.google.com/translate?sl=ko&tl=en&u=${encodeURIComponent(url)}`;
+
+export function NoticeSheet(props: Props) {
+  // Keep showing the last notice while the sheet plays its closing animation.
+  const [shown, setShown] = useState<Props>(props);
+  if (props.pendingId && (props.pendingId !== shown.pendingId || props.notice !== shown.notice || props.isRead !== shown.isRead || props.loading !== shown.loading)) setShown(props);
+  if (!shown.pendingId) return null;
+  return <NoticeSheetBody {...shown} open={Boolean(props.pendingId)} onClose={props.onClose} onMarkRead={props.onMarkRead} />;
+}
+
+function NoticeSheetBody({ notice, pendingId, loading, isRead, onClose, onMarkRead, open }: Props & { open: boolean }) {
   const [detail, setDetail] = useState<Detail | null>(null);
 
   // Read the notice inside the app: the server fetches the article, keeps only safe markup, and caches it.
@@ -48,7 +61,7 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
 
   if (!notice) {
     return (
-      <Sheet open onClose={onClose} title={loading ? "Loading notice…" : "Notice not found"}>
+      <Sheet open={open} onClose={onClose} title={loading ? "Loading notice…" : "Notice not found"}>
         {!loading && <p className="text-sm text-muted-foreground">This notice is no longer on the board. It may have been removed or moved.</p>}
       </Sheet>
     );
@@ -68,9 +81,9 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
   };
 
   return (
-    <Sheet open onClose={onClose} title={title}>
+    <Sheet open={open} onClose={onClose} title={title} plainTitle>
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <Pill tone={notice.source === "cse" ? "secondary" : "primary"}>{site}</Pill>
+        <Pill tone="primary">{site}</Pill>
         {notice.pinned && <Pill>Pinned</Pill>}
         <span className="text-sm font-bold text-muted-foreground">
           Posted {article?.date ?? notice.date}
@@ -130,6 +143,17 @@ export function NoticeSheet({ notice, pendingId, loading, isRead, onClose, onMar
             className="flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-muted-foreground hover:text-primary"
           >
             Open on the {site} site <ExternalLink size={14} />
+          </a>
+        )}
+        {notice.url && HANGUL.test(title) && (
+          <a
+            href={translateUrl(notice.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onMarkRead([notice.id])}
+            className="flex items-center justify-center gap-1.5 py-2 -mt-2 text-sm font-bold text-muted-foreground hover:text-primary"
+          >
+            <Languages size={14} /> Read it in English (Google Translate)
           </a>
         )}
       </div>

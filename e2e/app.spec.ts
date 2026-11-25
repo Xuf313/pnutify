@@ -18,9 +18,9 @@ test.describe('Briefing', () => {
     await expect(img).toHaveClass(/is-loaded/);
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 
-    // Dateline, then the painting's caption, then the summary line.
+    // Dateline, then the summary line (before the painting, so it's on the first screen), then the caption.
     const order = await brief.locator('header p').evaluateAll((ps) => ps.map((p) => p.className));
-    expect(order).toEqual(['brief-dateline', 'brief-caption', 'brief-blurb']);
+    expect(order).toEqual(['brief-dateline', 'brief-blurb', 'brief-caption']);
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
@@ -29,6 +29,10 @@ test.describe('Briefing', () => {
     // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.
     await expect(brief.locator('section[aria-labelledby="brief-classes"]')).toHaveCount(0);
     await noSidewaysScroll(page);
+
+    // The count in the summary line goes to Notices.
+    await brief.locator('.brief-blurb').getByRole('button', { name: /new notice/ }).click();
+    await expect(visible(page, 'main').getByRole('heading', { name: 'Notices' })).toBeVisible();
   });
 });
 
@@ -89,6 +93,31 @@ test.describe('Tasks', () => {
     // Survives a reload (saved on the device).
     await page.reload();
     await expect(visible(page, 'main').getByText('OS homework 3')).toHaveCount(0);
+  });
+
+  test('deleting a task can be undone', async ({ page }) => {
+    await page.goto('/?tab=tasks');
+    const main = visible(page, 'main');
+    await main.getByRole('button', { name: /^Add$/ }).click();
+    await main.getByLabel("What's due").fill('Lab report');
+    await main.getByRole('button', { name: 'Add task' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Added "Lab report"' })).toBeVisible();
+
+    // Delete lives in the edit form, not next to the pencil.
+    await main.getByRole('button', { name: 'Edit "Lab report"' }).click();
+    await main.getByRole('button', { name: 'Delete' }).click();
+    await expect(main.getByText('Lab report')).toHaveCount(0);
+    await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+    await expect(main.getByText('Lab report')).toBeVisible();
+  });
+
+  test('the Calendar adds a task on the chosen day', async ({ page }) => {
+    await page.goto('/?tab=calendar');
+    const main = visible(page, 'main');
+    await main.getByRole('button', { name: /Add a task for this day/ }).click();
+    await expect(main.getByLabel("What's due")).toBeFocused();
+    const today = await page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date()));
+    await expect(main.getByLabel('Due (KST)')).toHaveValue(today);
   });
 });
 

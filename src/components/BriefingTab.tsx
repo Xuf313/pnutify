@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Smartphone, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, Check, ExternalLink, Plus, Smartphone, TriangleAlert } from "lucide-react";
 import { cn, DdaySticker } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
-import { isIOS, isStandalone } from "@/lib/client/push";
+import { isIOS, isStandalone, pushSupport } from "@/lib/client/push";
+import type { SettingsSection } from "./SettingsSheet";
 import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
 import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
@@ -31,7 +32,11 @@ type Props = {
   onOpenNotice: (id: string) => void;
   onToggleTask: (id: string) => void;
   goTo: (t: Tab) => void;
-  openSettings: () => void;
+  openSettings: (section?: SettingsSection) => void;
+  /** Opens the Calendar on this day. */
+  openCalendarDay: (day: string) => void;
+  /** Opens Tasks with the add form. */
+  addTask: () => void;
 };
 
 function plural(n: number, word: string) {
@@ -53,6 +58,25 @@ type Update = {
   source?: string;
   open: () => void;
 };
+
+/** A piece of the lead line; counts link to their tab. */
+type Part = { text: string; go?: () => void };
+
+/** "a", "a and b", "a, b and c" */
+function joinParts(parts: Part[]): ReactNode {
+  return parts.map((part, i) => (
+    <Fragment key={part.text}>
+      {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
+      {part.go ? (
+        <button type="button" onClick={part.go}>
+          {part.text}
+        </button>
+      ) : (
+        part.text
+      )}
+    </Fragment>
+  ));
+}
 
 /** The one thing most worth doing next. */
 type Push = { label: string; topic: string; text: string; cta: string; act: () => void };
@@ -81,18 +105,33 @@ export function BriefingTab(p: Props) {
   const classes = useMemo(() => classDigest(p.posts, now), [p.posts, now]);
 
   // ---------- the blurb under the painting ----------
-  const parts: string[] = [];
-  if (overdue.length) parts.push(`${plural(overdue.length, "task")} overdue`);
-  if (dueToday.length) parts.push(`${plural(dueToday.length, "deadline")} today`);
-  if (freshNotices.length) parts.push(plural(freshNotices.length, "new notice"));
-  const dayLine =
-    parts.length === 0
-      ? thisWeek.length
-        ? `Nothing due today, and ${plural(thisWeek.length, "deadline")} later this week. A good day to get ahead.`
-        : "Nothing due and nothing new. Today is yours to spend however you like."
-      : `${greeting(now)}. You have ${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
+  const parts: Part[] = [];
+  const toTasks = () => p.goTo("tasks");
+  if (overdue.length) parts.push({ text: `${plural(overdue.length, "task")} overdue`, go: toTasks });
+  if (dueToday.length) parts.push({ text: `${plural(dueToday.length, "deadline")} today`, go: toTasks });
+  if (freshNotices.length) parts.push({ text: plural(freshNotices.length, "new notice"), go: () => p.goTo("notices") });
+  // With PLATO/NESPA set up, class posts get a sentence of their own below instead.
+  if (newPosts.length && !hasClasses) parts.push({ text: plural(newPosts.length, "new course post") });
+  const dayLine: ReactNode =
+    parts.length === 0 ? (
+      thisWeek.length ? (
+        `Nothing due today, and ${plural(thisWeek.length, "deadline")} later this week. A good day to get ahead.`
+      ) : (
+        "Nothing due and nothing new. Today is yours to spend however you like."
+      )
+    ) : (
+      <>
+        {greeting(now)}. You have {joinParts(parts)}.
+      </>
+    );
   // Classes always get a line of their own, even in a quiet week.
-  const blurb = hasClasses ? `${dayLine} ${classSentence(classes)}` : dayLine;
+  const blurb: ReactNode = hasClasses ? (
+    <>
+      {dayLine} {classSentence(classes)}
+    </>
+  ) : (
+    dayLine
+  );
 
   // ---------- "Push your work forward" ----------
   const openTask = (t: Task) => () => (t.url ? window.open(t.url, "_blank", "noopener,noreferrer") : p.goTo("tasks"));
@@ -108,7 +147,7 @@ export function BriefingTab(p: Props) {
         ]
           .filter(Boolean)
           .join(" · "),
-        cta: nextUp.url ? "Open it" : "Let's do it",
+        cta: nextUp.url ? "Open it" : "See it in Tasks",
         act: openTask(nextUp),
       }
     : newPosts[0]
@@ -157,7 +196,10 @@ export function BriefingTab(p: Props) {
   });
   const maxCount = Math.max(1, ...week.map((w) => w.count));
 
-  const alertsOff = p.alertsReady && p.alerts.boards.length === 0 && !p.alerts.tasks;
+  // Only offer alerts where they can actually be turned on (not on a server without push keys, or a browser without push).
+  const support = pushSupport();
+  const alertsPossible = support.ok || support.reason === "ios-not-installed" || support.reason === "denied";
+  const alertsOff = p.alertsReady && alertsPossible && p.alerts.boards.length === 0 && !p.alerts.tasks;
   const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
   const painting = paintingOfTheDay(now);
@@ -176,17 +218,17 @@ export function BriefingTab(p: Props) {
 
   return (
     <div className="brief pb-4">
-      {/* ---------- hero: the painting of the day ---------- */}
-      {/* A newspaper clipping taped into the notebook */}
+      {/* A newspaper clipping taped into the notebook: nameplate, the lead line, then the painting of the day */}
       <header className="brief-clip">
         <span className="tape tape--l" aria-hidden />
         <span className="tape tape--r" aria-hidden />
         <p className="brief-dateline">
-          <span>{edgeDate}</span>
-          <span>Pusan National University</span>
+          <span className="brief-dateline__date">{edgeDate}</span>
+          <span>부산대학교 · Pusan National University</span>
         </p>
-        <span className="brief-the brief-day-kicker">The</span>
+        <span className="brief-the">The</span>
         <h1 className="brief-day">{weekday} Brief</h1>
+        <p className="brief-blurb">{blurb}</p>
         <figure className="brief-frame">
           <div className="brief-frame__canvas">
             <Image
@@ -203,20 +245,19 @@ export function BriefingTab(p: Props) {
           </div>
         </figure>
         <p className="brief-caption">{paintingCaption(painting)}</p>
-        <p className="brief-blurb">{blurb}</p>
       </header>
 
       {problems.map((msg) => (
-        <p key={msg} className="mt-4 text-xs font-bold text-[#E5484D] flex items-start gap-1.5">
+        <p key={msg} className="mt-4 text-xs font-bold text-danger flex items-start gap-1.5">
           <TriangleAlert size={14} className="shrink-0 mt-px" /> {msg}
         </p>
       ))}
 
       {/* ---------- push your work forward ---------- */}
       {push && (
-        <section className="brief-push" aria-label="Push your work forward">
+        <section className="brief-push" aria-label={push.label}>
           <div className="flex-1 min-w-0">
-            <p className="brief-push__label">Push your work forward · {push.label}</p>
+            <p className="brief-push__label">{push.label}</p>
             <h2 className="brief-push__topic">{push.topic}</h2>
             <p className="brief-push__text">{push.text}</p>
           </div>
@@ -290,10 +331,15 @@ export function BriefingTab(p: Props) {
       <div>
       {/* ---------- to-dos ---------- */}
       <section className="brief-section">
-        <h2 className="brief-h2">
-          To-dos
-          {pending.length > 0 && <small>{plural(pending.length, "open task")}</small>}
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="brief-h2">
+            To-dos
+            {pending.length > 0 && <small>{plural(pending.length, "open task")}</small>}
+          </h2>
+          <button onClick={p.addTask} className="shrink-0 mr-1 text-sm font-bold text-primary flex items-center gap-1 hover:underline">
+            <Plus size={15} /> Add
+          </button>
+        </div>
         {todos.length > 0 ? (
           <div>
             {todos.map((t) => (
@@ -316,7 +362,7 @@ export function BriefingTab(p: Props) {
         ) : (
           <p className="mx-1 text-sm font-bold text-muted-foreground">
             Nothing due this week.{" "}
-            <button onClick={() => p.goTo("tasks")} className="text-primary hover:underline">
+            <button onClick={p.addTask} className="text-primary hover:underline">
               Add an assignment or exam
             </button>{" "}
             and you&apos;ll get a reminder before it&apos;s due.
@@ -325,8 +371,8 @@ export function BriefingTab(p: Props) {
       </section>
 
       </div>
-      {/* ---------- new updates ---------- */}
-      <section className="brief-section">
+      {/* ---------- new updates (first on phones) ---------- */}
+      <section className="brief-section brief-updates">
         <h2 className="brief-h2">New updates</h2>
         {updates.length === 0 ? (
           <p className="mx-1 text-sm font-bold text-muted-foreground">
@@ -345,7 +391,7 @@ export function BriefingTab(p: Props) {
                     <button onClick={u.open} className="text-left">
                       {u.title}
                     </button>
-                    <span className={cn("brief-tag", u.tone === "primary" && "brief-tag--primary", u.tone === "secondary" && "brief-tag--secondary")}>{u.tag}</span>
+                    <span className={cn("brief-tag", u.tone === "primary" && "brief-tag--primary")}>{u.tag}</span>
                   </h3>
                   <p className="brief-item__text">
                     {u.text}
@@ -404,17 +450,20 @@ export function BriefingTab(p: Props) {
           {week.map((w, i) => (
             <button
               key={w.day}
-              onClick={() => p.goTo("calendar")}
-              className={cn("flex flex-col items-center gap-1 py-1.5 rounded-lg", i === 0 && "bg-muted")}
-              aria-label={`${w.label}: ${plural(w.count, "deadline")}`}
+              onClick={() => p.openCalendarDay(w.day)}
+              className={cn("flex flex-col items-center gap-1 py-1.5 rounded-lg transition-transform duration-150 active:scale-95", i === 0 && "bg-muted")}
+              aria-label={`${w.label}, ${formatDate(fromKst(w.day, "12:00"), { month: "long", day: "numeric" })}: ${plural(w.count, "deadline")}`}
             >
-              <span className="text-[11px] font-bold text-muted-foreground">{w.label}</span>
-              <span className="font-pixel text-sm font-bold text-foreground">{w.date}</span>
+              <span className="text-xs font-bold text-muted-foreground">{w.label}</span>
+              <span className="text-sm font-extrabold tabular-nums text-foreground">{w.date}</span>
               <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
                 <span
                   className={cn("absolute bottom-0 inset-x-0 rounded-full", w.count ? "bg-primary" : "")}
                   style={{ height: `${(w.count / maxCount) * 100}%` }}
                 />
+              </span>
+              <span className={cn("text-xs font-extrabold tabular-nums", w.count ? "text-foreground" : "text-muted-foreground")} aria-hidden>
+                {w.count || "–"}
               </span>
             </button>
           ))}
@@ -430,7 +479,7 @@ export function BriefingTab(p: Props) {
               title="Get alerts"
               body="A ping when a new notice goes up, and a reminder before your deadlines."
               cta="Turn on alerts"
-              onClick={p.openSettings}
+              onClick={() => p.openSettings("alerts")}
             />
           )}
           {showInstall && (
@@ -439,7 +488,7 @@ export function BriefingTab(p: Props) {
               title="Add to your home screen"
               body={isIOS() ? "Opens like an app, and it's needed for alerts on iPhone." : "Opens like an app, full screen, one tap away."}
               cta="Show me how"
-              onClick={p.openSettings}
+              onClick={() => p.openSettings("install")}
             />
           )}
         </section>
@@ -483,7 +532,7 @@ function TodoItem({ task, now, onToggle }: { task: Task; now: number; onToggle: 
         <p className="brief-todo__label">{task.title}</p>
         <p className="brief-todo__ctx">
           {[src, task.course && task.course !== "General" && task.course !== "NESPA" ? task.course : null, formatDue(task.dueDate, now)].filter(Boolean).join(" · ")}
-          {overdue && <span className="text-[#E5484D]"> · overdue</span>}
+          {overdue && <span className="text-danger"> · overdue</span>}
         </p>
       </div>
       {task.url && (
@@ -532,7 +581,7 @@ export function TaskRow({ task, now, onToggle }: { task: Task; now: number; onTo
 function SetupCard({ icon, title, body, cta, onClick }: { icon: React.ReactNode; title: string; body: string; cta: string; onClick: () => void }) {
   return (
     <div className="cozy-card bg-card p-4 flex flex-col gap-2 border-dashed">
-      <p className="flex items-center gap-2 font-pixel font-bold text-foreground">
+      <p className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground">
         <span className="text-primary">{icon}</span>
         {title}
       </p>
