@@ -296,3 +296,28 @@ test.describe('A new device', () => {
     await expect(visible(page, 'main').getByRole('tab', { name: /CSE/ })).toBeVisible();
   });
 });
+
+test.describe('Phone tab bar', () => {
+  test('slide a finger along it to pick a tab', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone');
+    await page.goto('/');
+    const bar = page.locator('nav[aria-label="Sections"] >> visible=true').first();
+    const tab = (name: string) => bar.getByRole('button', { name, exact: true });
+    const from = await tab('Briefing').boundingBox();
+    const to = await tab('Tasks').boundingBox();
+    if (!from || !to) throw new Error('no tabs');
+    const y = from.y + from.height / 2;
+    await page.mouse.move(from.x + from.width / 2, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(from.x + from.width / 2 + ((to.x - from.x) * i) / 10, y);
+    // While held, nothing has switched yet.
+    await expect(tab('Briefing')).toHaveAttribute('aria-current', 'page');
+    await page.mouse.up();
+    await expect(tab('Tasks')).toHaveAttribute('aria-current', 'page');
+    await expect(visible(page, 'main').getByRole('heading', { name: 'Tasks' })).toBeVisible();
+
+    // A plain tap still works.
+    await tab('Notices').click();
+    await expect(tab('Notices')).toHaveAttribute('aria-current', 'page');
+  });
+});
