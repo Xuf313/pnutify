@@ -325,6 +325,31 @@ test.describe('Phone tab bar', () => {
     await expect(tab('Notices')).toHaveAttribute('aria-current', 'page');
   });
 
+  test('sliding works with a real finger (touch), not just a mouse', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone');
+    await page.goto('/');
+    const bar = page.locator('nav[aria-label="Sections"] >> visible=true').first();
+    const tab = (name: string) => bar.getByRole('button', { name, exact: true });
+    const from = (await tab('Briefing').boundingBox())!;
+    const to = (await tab('Tasks').boundingBox())!;
+    const y = from.y + from.height / 2;
+    // Touch events go through the browser's touch handling, which gives the touched tab the pointer first.
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    const x0 = from.x + from.width / 2;
+    await touch('touchStart', x0);
+    for (let i = 1; i <= 12; i++) {
+      await touch('touchMove', x0 + ((to.x - from.x) * i) / 12);
+      await page.waitForTimeout(16);
+    }
+    // Mid-slide, the pill is under the finger (over Tasks), not back on Briefing.
+    const pill = (await bar.locator('.nav-pill').boundingBox())!;
+    expect(Math.abs(pill.x - to.x)).toBeLessThan(12);
+    await touch('touchEnd', 0);
+    await expect(tab('Tasks')).toHaveAttribute('aria-current', 'page');
+  });
+
   test('the highlight never goes outside the bar, even while held at either end', async ({ page }, info) => {
     test.skip(info.project.name !== 'phone');
     await page.goto('/');
