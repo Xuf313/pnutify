@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "./ui";
 import type { Tab } from "@/lib/client/types";
 
@@ -115,6 +115,30 @@ export function Nav({ items, active, onSelect, badge, variant, instant }: Props)
     }
     setDrag(null);
   };
+  // However the touch ends (lifted outside the bar, cancelled by the system, app sent to the
+  // background), the bar goes back to normal.
+  useEffect(() => {
+    if (!held) return;
+    const reset = () => {
+      press.current = null;
+      setHeld(false);
+      setDrag(null);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!press.current || press.current.id === e.pointerId) setTimeout(reset, 0);
+    };
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("blur", reset);
+    document.addEventListener("visibilitychange", reset);
+    return () => {
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("blur", reset);
+      document.removeEventListener("visibilitychange", reset);
+    };
+  }, [held]);
+
   const onClickCapture = (e: React.MouseEvent) => {
     if (swallowClick.current) {
       e.stopPropagation();
@@ -173,6 +197,7 @@ export function Nav({ items, active, onSelect, badge, variant, instant }: Props)
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
+      onLostPointerCapture={onPointerEnd}
       onClickCapture={onClickCapture}
     >
       {/* plain tabs: these are the real buttons */}

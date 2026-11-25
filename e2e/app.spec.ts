@@ -23,7 +23,11 @@ test.describe('Briefing', () => {
     expect(order).toEqual(['brief-dateline', 'brief-blurb', 'brief-caption']);
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
-    for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
+    for (const h of ['New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
+    // To-dos live in Tasks, not the Briefing.
+    await expect(brief.getByRole('heading', { name: /To-dos/ })).toHaveCount(0);
+    // No "Add to your home screen" card in the Briefing (it's in Settings).
+    await expect(brief.getByText('Add to your home screen')).toHaveCount(0);
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
     // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.
@@ -319,5 +323,33 @@ test.describe('Phone tab bar', () => {
     // A plain tap still works.
     await tab('Notices').click();
     await expect(tab('Notices')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the highlight never goes outside the bar, even while held at either end', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone');
+    await page.goto('/');
+    const bar = page.locator('nav[aria-label="Sections"] >> visible=true').first();
+    const card = bar.locator('.cozy-card');
+    const pill = bar.locator('.nav-pill');
+    const inside = async () => {
+      const c = (await card.boundingBox())!;
+      const p = (await pill.boundingBox())!;
+      expect(p.x).toBeGreaterThanOrEqual(c.x);
+      expect(p.x + p.width).toBeLessThanOrEqual(c.x + c.width);
+      expect(p.y + p.height).toBeLessThanOrEqual(c.y + c.height);
+    };
+    for (const name of ['Calendar', 'Briefing']) {
+      const t = (await bar.getByRole('button', { name, exact: true }).boundingBox())!;
+      await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2);
+      await page.mouse.down();
+      // Slide past the end of the bar.
+      await page.mouse.move(name === 'Calendar' ? t.x + t.width + 60 : t.x - 60, t.y + t.height / 2, { steps: 5 });
+      await page.waitForTimeout(300);
+      await inside();
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+      await inside();
+      await expect(bar.locator('.nav-wrap')).not.toHaveAttribute('data-held');
+    }
   });
 });

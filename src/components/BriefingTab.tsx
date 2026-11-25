@@ -2,10 +2,10 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Landmark, Plus, Smartphone, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, Check, ExternalLink, Landmark, TriangleAlert } from "lucide-react";
 import { cn, DdaySticker } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
-import { isIOS, isStandalone, pushSupport } from "@/lib/client/push";
+import { pushSupport } from "@/lib/client/push";
 import type { SettingsSection } from "./SettingsSheet";
 import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
@@ -174,9 +174,6 @@ export function BriefingTab(p: Props) {
         }
       : null;
 
-  // ---------- to-dos: overdue, today, then the rest of the week ----------
-  const todos = [...overdue, ...dueToday, ...thisWeek].slice(0, 6);
-
   // ---------- "New updates" ----------
   const updates: Update[] = useMemo(() => {
     const fromNotices: Update[] = freshNotices.map((n) => ({
@@ -214,7 +211,6 @@ export function BriefingTab(p: Props) {
   const support = pushSupport();
   const alertsPossible = support.ok || support.reason === "ios-not-installed" || support.reason === "denied";
   const alertsOff = p.alertsReady && alertsPossible && p.alerts.boards.length === 0 && !p.alerts.tasks;
-  const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
   const painting = paintingOfTheDay(now);
   const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
@@ -413,50 +409,6 @@ export function BriefingTab(p: Props) {
         </section>
       )}
 
-      <div className="brief-cols">
-      <div>
-      {/* ---------- to-dos ---------- */}
-      <section className="brief-section">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="brief-h2">
-            To-dos
-            {pending.length > 0 && <small>{plural(pending.length, "open task")}</small>}
-          </h2>
-          <button onClick={p.addTask} className="shrink-0 mr-1 text-sm font-bold text-primary flex items-center gap-1 hover:underline">
-            <Plus size={15} /> Add
-          </button>
-        </div>
-        {todos.length > 0 ? (
-          <div>
-            {todos.map((t) => (
-              <TodoItem key={t.id} task={t} now={now} onToggle={p.onToggleTask} />
-            ))}
-            {pending.length > todos.length && (
-              <button onClick={() => p.goTo("tasks")} className="mt-2 ml-1 text-sm font-bold text-primary flex items-center gap-1 hover:underline">
-                {plural(pending.length - todos.length, "more task")} <ArrowRight size={14} />
-              </button>
-            )}
-          </div>
-        ) : doneToday.length > 0 ? (
-          <div className="brief-alldone">
-            <p className="text-3xl" aria-hidden>
-              🎉
-            </p>
-            <h3>You completed all your to-dos!</h3>
-            <p className="text-sm font-bold text-muted-foreground mt-1">Nice work. The day is yours.</p>
-          </div>
-        ) : (
-          <p className="mx-1 text-sm font-bold text-muted-foreground">
-            Nothing due this week.{" "}
-            <button onClick={p.addTask} className="text-primary hover:underline">
-              Add an assignment or exam
-            </button>{" "}
-            and you&apos;ll get a reminder before it&apos;s due.
-          </p>
-        )}
-      </section>
-
-      </div>
       {/* ---------- new updates (first on phones) ---------- */}
       <section className="brief-section brief-updates">
         <h2 className="brief-h2">New updates</h2>
@@ -505,31 +457,18 @@ export function BriefingTab(p: Props) {
       </section>
 
       </div>
-
-      </div>
       </div>
 
       {/* ---------- get set up ---------- */}
-      {(alertsOff || showInstall) && (
+      {alertsOff && (
         <section className="brief-section brief-setup grid gap-3 sm:grid-cols-2">
-          {alertsOff && (
-            <SetupCard
-              icon={<BellRing size={20} />}
-              title="Get alerts"
-              body="A ping when a new notice goes up, and a reminder before your deadlines."
-              cta="Turn on alerts"
-              onClick={() => p.openSettings("alerts")}
-            />
-          )}
-          {showInstall && (
-            <SetupCard
-              icon={<Smartphone size={20} />}
-              title="Add to your home screen"
-              body={isIOS() ? "Opens like an app, and it's needed for alerts on iPhone." : "Opens like an app, full screen, one tap away."}
-              cta="Show me how"
-              onClick={() => p.openSettings("install")}
-            />
-          )}
+          <SetupCard
+            icon={<BellRing size={20} />}
+            title="Get alerts"
+            body="A ping when a new notice goes up, and a reminder before your deadlines."
+            cta="Turn on alerts"
+            onClick={() => p.openSettings("alerts")}
+          />
         </section>
       )}
 
@@ -552,37 +491,6 @@ export function BriefingTab(p: Props) {
         </p>
         <p className="brief-footer__love">With love from a PNU student, for PNU students</p>
       </footer>
-    </div>
-  );
-}
-
-function TodoItem({ task, now, onToggle }: { task: Task; now: number; onToggle: (id: string) => void }) {
-  const done = task.status === "completed";
-  const overdue = !done && task.dueDate < now;
-  const src = sourceName(task);
-  return (
-    <div className={cn("brief-todo", done && "is-done")}>
-      <button
-        role="checkbox"
-        aria-checked={done}
-        onClick={() => onToggle(task.id)}
-        className="brief-check"
-        aria-label={done ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
-      >
-        {done && <Check size={14} strokeWidth={3.5} />}
-      </button>
-      <div className="flex-1 min-w-0">
-        <p className="brief-todo__label">{task.title}</p>
-        <p className="brief-todo__ctx">
-          {[src, task.course && task.course !== "General" && task.course !== "NESPA" ? task.course : null, formatDue(task.dueDate, now)].filter(Boolean).join(" · ")}
-          {overdue && <span className="text-danger"> · overdue</span>}
-        </p>
-      </div>
-      {task.url && (
-        <a href={task.url} target="_blank" rel="noopener noreferrer" className="p-1 text-muted-foreground hover:text-primary" aria-label={`Open "${task.title}"`}>
-          <ExternalLink size={15} />
-        </a>
-      )}
     </div>
   );
 }
