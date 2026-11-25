@@ -8,7 +8,8 @@ test.beforeEach(async ({ page }) => {
 test('PLATO and NESPA show up in the Briefing and Tasks', async ({ page }) => {
   await page.goto('/');
   const brief = visible(page, '.brief');
-  await expect(brief.getByText('Lab 7 report').first()).toBeVisible();
+  // PLATO deadlines are in Tasks (checked below), not in a Briefing to-do list.
+  await expect(brief.getByRole('heading', { name: /To-dos/ })).toHaveCount(0);
   // The newest course post leads "Push your work forward".
   await expect(brief.locator('.brief-push__topic')).toHaveText('중간고사 강의실 변경 안내');
   // Class announcements have their own section, with a one-line summary, and a line in the summary up top.

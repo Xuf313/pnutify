@@ -23,7 +23,9 @@ test.describe('Briefing', () => {
     expect(order).toEqual(['brief-dateline', 'brief-blurb', 'brief-caption']);
     await expect(brief.locator('.brief-blurb')).toContainText('new notice');
 
-    for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
+    for (const h of ['New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
+    // To-dos live in Tasks, not the Briefing.
+    await expect(brief.getByRole('heading', { name: /To-dos/ })).toHaveCount(0);
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
     // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.

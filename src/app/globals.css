@@ -569,7 +569,7 @@ body {
   .brief-dept { order: 3; }
   .brief-push { order: 3; }
   .brief-classes { order: 4; }
-  .brief-cols { order: 5; }
+  .brief-cols, .brief-updates { order: 5; }
   .brief-dayparts { order: 6; }
   .brief-ahead { order: 7; }
   .brief-setup { order: 8; }
