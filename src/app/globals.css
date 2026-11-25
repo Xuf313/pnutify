@@ -468,7 +468,7 @@ body {
 
 /* Desktop: two columns, with a column rule */
 @media (min-width: 1024px) {
-  .brief { max-width: 54rem; }
+  .brief { max-width: 78rem; }
   .brief-clip { max-width: 40rem; margin-left: auto; margin-right: auto; }
   .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
   .brief-cols > :last-child { position: relative; }
@@ -537,3 +537,48 @@ body {
 /* A task's check pops in when it's ticked off */
 .check-pop { animation: check-pop 0.28s var(--ease-out); }
 @keyframes check-pop { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ══════════════════════════════════════════════════════════════
+   The Briefing's front page on wide screens
+   ══════════════════════════════════════════════════════════════
+   The columns follow the room the Briefing has (not the window), so the
+   sidebar and narrow windows are taken into account. */
+.brief { container-type: inline-size; display: flex; flex-direction: column; }
+
+/* One column: the wrappers step aside and the blocks keep the phone order. */
+.brief-front, .brief-lead, .brief-rail { display: contents; }
+@container (max-width: 55.99rem) {
+  .brief-clip { order: 1; }
+  .brief-problem { order: 2; }
+  .brief-dept { order: 3; }
+  .brief-push { order: 3; }
+  .brief-classes { order: 4; }
+  .brief-cols { order: 5; }
+  .brief-dayparts { order: 6; }
+  .brief-ahead { order: 7; }
+  .brief-setup { order: 8; }
+  .brief-footer { order: 9; }
+}
+
+/* Two columns, from about 900px of room. */
+@container (min-width: 56rem) {
+  .brief-front {
+    display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); column-gap: 3rem; align-items: start;
+  }
+  .brief-lead, .brief-rail { display: block; min-width: 0; }
+  .brief-lead .brief-clip { max-width: none; margin-left: 0; margin-right: 0; }
+  /* The right column starts level with the clipping. */
+  .brief-rail > :first-child { margin-top: 0.9rem; }
+  .brief-rail > .brief-section:first-child { padding-top: 0; border-top: 0; }
+  /* To-dos and new updates stack inside the right column. */
+  .brief-rail .brief-cols { display: block; }
+  .brief-rail .brief-cols > :last-child::before { display: none; }
+  .brief-lead .brief-ahead, .brief-lead .brief-dayparts { margin-top: 2.2rem; }
+  /* Size the nameplate to its column, not the window. */
+  .brief-lead .brief-day { font-size: clamp(2.2rem, 4.6cqi, 3.6rem); }
+}
+
+/* Very wide: a little more air between the columns. */
+@container (min-width: 72rem) {
+  .brief-front { column-gap: 4rem; }
+}

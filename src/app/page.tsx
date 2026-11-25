@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarDays, ListTodo, Newspaper, Settings, Sunrise } from "lucide-react";
-import { AppLogo, Toast } from "@/components/ui";
+import { AppLogo, cn, Toast } from "@/components/ui";
 import { Nav } from "@/components/Nav";
 import { BriefingTab } from "@/components/BriefingTab";
 import { NoticesTab } from "@/components/NoticesTab";
@@ -97,8 +97,15 @@ function boot(): Boot {
   const seed = read<number | "done" | null>(KEYS.readSeed, null);
   const seedReadSince = seed === "done" ? null : typeof seed === "number" ? seed : sinceTs;
   if (seedReadSince !== null) write(KEYS.readSeed, seedReadSince);
-  const storedBoards = read<string[] | null>(KEYS.boards, null);
-  // Before boards could be added, everyone had CSE and International; those are already "seeded".
+  let storedBoards = read<string[] | null>(KEYS.boards, null);
+  // Before boards could be chosen, everyone saw CSE and International. Devices that have used
+  // PNUtify keep that (so nobody loses a board); new devices start with International only.
+  const usedBefore = seed === "done" || read<string[] | null>(KEYS.seededBoards, null) !== null;
+  if (!Array.isArray(storedBoards) && usedBefore) {
+    storedBoards = ["cse", "international"];
+    write(KEYS.boards, storedBoards);
+  }
+  // Boards whose older notices were already marked read on this device.
   const seededBoards = read<string[] | null>(KEYS.seededBoards, null) ?? (seed === "done" ? ["cse", "international"] : []);
   bootData = {
     theme: loadTheme(),
@@ -730,6 +737,7 @@ function App() {
           now={now}
           sinceTs={sinceTs}
           notices={shownNotices}
+          boards={boards}
           readIds={readIds}
           tasks={visibleTasks}
           posts={posts}
@@ -852,7 +860,8 @@ function App() {
           </div>
         </aside>
         <main className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
-          <div className="max-w-3xl mx-auto">{content}</div>
+          {/* The Briefing gets the whole width for its two-column front page; the lists stay readable. */}
+          <div className={cn("mx-auto", tab === "briefing" ? "max-w-[78rem]" : "max-w-3xl")}>{content}</div>
         </main>
       </div>
 

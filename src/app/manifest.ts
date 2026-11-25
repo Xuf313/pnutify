@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/',
     name: 'PNUtify — PNU notices, deadlines & daily briefing',
     short_name: 'PNUtify',
-    description: 'CSE and International notices, your deadlines and a daily briefing for Pusan National University students.',
+    description: 'Your department and International notices, your deadlines and a daily briefing for Pusan National University students.',
     start_url: '/?source=pwa',
     scope: '/',
     display: 'standalone',

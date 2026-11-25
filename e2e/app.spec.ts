@@ -259,3 +259,40 @@ test.describe('PLATO calendar link', () => {
     await expect(page.getByRole('dialog').getByText('PLATO deadlines', { exact: true })).toHaveCount(0);
   });
 });
+
+test.describe('A new device', () => {
+  test('starts with International only and asks for the department', async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await mockApis(page, { newDevice: true });
+    await page.addInitScript(() => localStorage.removeItem('boards_v1'));
+    await page.goto('/');
+    const brief = visible(page, '.brief');
+    await expect(brief.getByText('Add your department', { exact: true })).toBeVisible();
+    // The credit line names what this device actually shows.
+    await expect(brief.locator('.brief-footer__credit')).not.toContainText('CSE');
+
+    await brief.getByRole('button', { name: 'Choose my department' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('#settings-boards')).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Remove International' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove CSE' })).toHaveCount(0);
+    await dialog.getByLabel('Search departments').fill('정보컴퓨터');
+    await dialog.getByRole('button', { name: 'Add CSE' }).click();
+    await page.keyboard.press('Escape');
+    await expect(brief.getByText('Add your department', { exact: true })).toHaveCount(0);
+  });
+
+  test('a device that used PNUtify before keeps CSE', async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await mockApis(page, { newDevice: true });
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.removeItem('boards_v1');
+        localStorage.setItem('read_seed_v1', JSON.stringify('done'));
+        sessionStorage.setItem('seeded', '1');
+      }
+    });
+    await page.goto('/?tab=notices');
+    await expect(visible(page, 'main').getByRole('tab', { name: /CSE/ })).toBeVisible();
+  });
+});

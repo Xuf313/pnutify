@@ -1,4 +1,4 @@
-import { BOARD_DEFS, CORE_BOARD_IDS } from '../boardList';
+import { BOARD_DEFS, DEFAULT_BOARD_IDS } from '../boardList';
 
 /** A board id: 'cse', 'international', or a department's (e.g. 'math'). */
 export type NoticeSource = string;
@@ -80,7 +80,7 @@ export const BOARDS: BoardInfo[] = BOARD_DEFS.map((d) => ({
 }));
 export const BOARD_IDS = BOARDS.map((b) => b.id);
 /** What a new device shows. */
-export const DEFAULT_BOARDS: NoticeSource[] = CORE_BOARD_IDS;
+export const DEFAULT_BOARDS: NoticeSource[] = DEFAULT_BOARD_IDS;
 /** Most boards one device can show (the server reads at most this many per request). */
 export const MAX_SHOWN_BOARDS = 12;
 export const SOURCE_LABEL = Object.fromEntries(BOARDS.map((b) => [b.id, b.label])) as Record<NoticeSource, string>;

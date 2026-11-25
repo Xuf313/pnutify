@@ -13,7 +13,7 @@ import type { CalendarView } from "@/lib/client/platoCalendar";
 
 export type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
-export type SettingsSection = "alerts" | "install" | "plato";
+export type SettingsSection = "alerts" | "install" | "plato" | "boards";
 
 type Props = {
   open: boolean;
@@ -154,11 +154,11 @@ export function SettingsSheet(p: Props) {
         </section>
 
         {/* ---------- boards ---------- */}
-        <section>
+        <section id="settings-boards" className="scroll-mt-4">
           <h3 className="flex items-center gap-2 font-pixel text-lg font-bold text-foreground mb-1">
             <Newspaper size={18} className="text-primary" /> Boards
           </h3>
-          <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device.</p>
+          <p className="text-sm text-muted-foreground mb-2">Choose which notice boards show up in PNUtify on this device. Add your department to get its notices.</p>
           <BoardPicker boards={p.boards} setBoards={p.setBoards} />
         </section>
 

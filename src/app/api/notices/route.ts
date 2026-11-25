@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { combine, readBoards, readMeta, recordDemand, refreshNotices, SNAPSHOT_MAX_AGE_MS } from '@/lib/notices';
-import { CORE_BOARD_IDS, boardDef, isKnownBoard } from '@/lib/boardList';
+import { DEFAULT_BOARD_IDS, boardDef, isKnownBoard } from '@/lib/boardList';
 import { getRedis } from '@/lib/redis';
 
 export const maxDuration = 60;
@@ -10,10 +10,10 @@ const MAX_BOARDS = 12;
 /** Boards a page view may read itself when they've never been read (the cron picks up the rest within a minute). */
 const MAX_INLINE_READS = 3;
 
-/** `?boards=cse,me,international`; unknown ids are ignored, and no list means the core boards. */
+/** `?boards=cse,math,international`; unknown ids are ignored, and no list means the default (International). */
 function requestedBoards(req: NextRequest): string[] {
   const raw = req.nextUrl.searchParams.get('boards');
-  if (raw === null) return CORE_BOARD_IDS;
+  if (raw === null) return DEFAULT_BOARD_IDS;
   return [...new Set(raw.split(',').map((s) => s.trim()).filter(isKnownBoard))].slice(0, MAX_BOARDS);
 }
 

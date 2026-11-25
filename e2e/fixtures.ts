@@ -59,7 +59,14 @@ export function ownerData(now = Date.now()) {
 }
 
 /** Answers the app's own API calls in the browser. Owner endpoints say "not the owner" unless `owner` is set. */
-export async function mockApis(page: Page, opts: { owner?: boolean } = {}) {
+export async function mockApis(page: Page, opts: { owner?: boolean; newDevice?: boolean } = {}) {
+  // Most tests act as a student who already shows CSE and International (new devices start with
+  // International only; see the "new device" tests). Only set when the test hasn't chosen boards.
+  if (!opts.newDevice) {
+    await page.addInitScript(() => {
+      if (localStorage.getItem('boards_v1') === null) localStorage.setItem('boards_v1', JSON.stringify(['cse', 'international']));
+    });
+  }
   // Like the real endpoint: only the boards asked for (the core ones when none are given).
   await page.route('**/api/notices**', (r) => {
     const boards = new URL(r.request().url()).searchParams.get('boards')?.split(',') ?? ['cse', 'international'];
