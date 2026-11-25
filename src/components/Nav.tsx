@@ -197,7 +197,9 @@ export function Nav({ items, active, onSelect, badge, variant, instant }: Props)
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
-      onLostPointerCapture={onPointerEnd}
+      // Only the bar losing the touch ends it. On phones the touched tab holds the touch first
+      // and "loses" it to the bar when the slide starts; that event bubbles up here too.
+      onLostPointerCapture={(e) => e.target === e.currentTarget && onPointerEnd(e)}
       onClickCapture={onClickCapture}
     >
       {/* plain tabs: these are the real buttons */}
