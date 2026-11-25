@@ -2,10 +2,10 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Landmark, Smartphone, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, Check, ExternalLink, Landmark, TriangleAlert } from "lucide-react";
 import { cn, DdaySticker } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
-import { isIOS, isStandalone, pushSupport } from "@/lib/client/push";
+import { pushSupport } from "@/lib/client/push";
 import type { SettingsSection } from "./SettingsSheet";
 import { paintingCaption, paintingOfTheDay } from "@/lib/client/paintings";
 import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "@/lib/client/types";
@@ -211,7 +211,6 @@ export function BriefingTab(p: Props) {
   const support = pushSupport();
   const alertsPossible = support.ok || support.reason === "ios-not-installed" || support.reason === "denied";
   const alertsOff = p.alertsReady && alertsPossible && p.alerts.boards.length === 0 && !p.alerts.tasks;
-  const showInstall = !isStandalone() && (p.canInstall || isIOS());
 
   const painting = paintingOfTheDay(now);
   const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
@@ -461,26 +460,15 @@ export function BriefingTab(p: Props) {
       </div>
 
       {/* ---------- get set up ---------- */}
-      {(alertsOff || showInstall) && (
+      {alertsOff && (
         <section className="brief-section brief-setup grid gap-3 sm:grid-cols-2">
-          {alertsOff && (
-            <SetupCard
-              icon={<BellRing size={20} />}
-              title="Get alerts"
-              body="A ping when a new notice goes up, and a reminder before your deadlines."
-              cta="Turn on alerts"
-              onClick={() => p.openSettings("alerts")}
-            />
-          )}
-          {showInstall && (
-            <SetupCard
-              icon={<Smartphone size={20} />}
-              title="Add to your home screen"
-              body={isIOS() ? "Opens like an app, and it's needed for alerts on iPhone." : "Opens like an app, full screen, one tap away."}
-              cta="Show me how"
-              onClick={() => p.openSettings("install")}
-            />
-          )}
+          <SetupCard
+            icon={<BellRing size={20} />}
+            title="Get alerts"
+            body="A ping when a new notice goes up, and a reminder before your deadlines."
+            cta="Turn on alerts"
+            onClick={() => p.openSettings("alerts")}
+          />
         </section>
       )}
 

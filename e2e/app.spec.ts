@@ -26,6 +26,8 @@ test.describe('Briefing', () => {
     for (const h of ['New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
     // To-dos live in Tasks, not the Briefing.
     await expect(brief.getByRole('heading', { name: /To-dos/ })).toHaveCount(0);
+    // No "Add to your home screen" card in the Briefing (it's in Settings).
+    await expect(brief.getByText('Add to your home screen')).toHaveCount(0);
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
     // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.
