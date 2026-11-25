@@ -11,6 +11,7 @@ import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "
 import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
 import { BoardIcon } from "./BoardIcon";
 import { isFreshNotice } from "@/lib/client/notices";
+import { classDigest, classSentence, summarize } from "@/lib/client/classSummary";
 
 const DAY = 86_400_000;
 
@@ -75,18 +76,23 @@ export function BriefingTab(p: Props) {
     [p.posts, p.readIds, now],
   );
 
+  // ---------- class announcements (owner: PLATO course news and NESPA notices) ----------
+  const hasClasses = Boolean(p.ownerData && (p.ownerData.plato.configured || p.ownerData.nespa.configured));
+  const classes = useMemo(() => classDigest(p.posts, now), [p.posts, now]);
+
   // ---------- the blurb under the painting ----------
   const parts: string[] = [];
   if (overdue.length) parts.push(`${plural(overdue.length, "task")} overdue`);
   if (dueToday.length) parts.push(`${plural(dueToday.length, "deadline")} today`);
   if (freshNotices.length) parts.push(plural(freshNotices.length, "new notice"));
-  if (newPosts.length) parts.push(plural(newPosts.length, "new course post"));
-  const blurb =
+  const dayLine =
     parts.length === 0
       ? thisWeek.length
         ? `Nothing due today, and ${plural(thisWeek.length, "deadline")} later this week. A good day to get ahead.`
         : "Nothing due and nothing new. Today is yours to spend however you like."
       : `${greeting(now)}. You have ${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
+  // Classes always get a line of their own, even in a quiet week.
+  const blurb = hasClasses ? `${dayLine} ${classSentence(classes)}` : dayLine;
 
   // ---------- "Push your work forward" ----------
   const openTask = (t: Task) => () => (t.url ? window.open(t.url, "_blank", "noopener,noreferrer") : p.goTo("tasks"));
@@ -120,16 +126,6 @@ export function BriefingTab(p: Props) {
 
   // ---------- "New updates" ----------
   const updates: Update[] = useMemo(() => {
-    const fromPosts: Update[] = newPosts.map((x) => ({
-      id: x.id,
-      title: x.title,
-      tag: x.source === "PLATO" ? x.course || "PLATO" : "NESPA",
-      tone: x.source === "PLATO" ? "secondary" : "muted",
-      text: x.excerpt || `${x.source}${x.course && x.course !== x.source ? ` · ${x.course}` : ""}`,
-      at: x.postedAt ?? 0,
-      url: x.url,
-      open: () => p.onOpenPost(x),
-    }));
     const fromNotices: Update[] = freshNotices.map((n) => ({
       id: n.id,
       title: n.title,
@@ -141,9 +137,9 @@ export function BriefingTab(p: Props) {
       source: n.source,
       open: () => p.onOpenNotice(n.id),
     }));
-    return [...fromPosts, ...fromNotices].sort((a, b) => b.at - a.at).slice(0, 7);
+    return fromNotices.sort((a, b) => b.at - a.at).slice(0, 7);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newPosts, freshNotices]);
+  }, [freshNotices]);
 
   // ---------- "Your day": today's deadlines by time ----------
   const todayAll = [...dueToday, ...doneToday.filter((t) => t.dueDate >= now - 12 * 3600_000)].sort((a, b) => a.dueDate - b.dueDate);
@@ -230,6 +226,63 @@ export function BriefingTab(p: Props) {
               <br />→
             </span>
           </button>
+        </section>
+      )}
+
+      {/* ---------- from your classes: always there, even in a quiet week ---------- */}
+      {hasClasses && (
+        <section className="brief-section" aria-labelledby="brief-classes">
+          <h2 id="brief-classes" className="brief-h2">
+            From your classes
+            <small>{classes.week.length > 0 ? `${plural(classes.week.length, "announcement")} this week` : "nothing new this week"}</small>
+          </h2>
+          {classes.byCourse.length > 1 && (
+            <p className="brief-class__digest">
+              {classes.byCourse.map(([course, n]) => (
+                <span key={course} className="brief-tag brief-tag--secondary">
+                  {course} {n}
+                </span>
+              ))}
+            </p>
+          )}
+          {classes.week.length === 0 ? (
+            <p className="mx-1 text-sm font-bold text-muted-foreground">
+              No new announcements from your classes this week.
+              {classes.latest && (
+                <>
+                  {" "}
+                  The last one:{" "}
+                  <button onClick={() => p.onOpenPost(classes.latest!)} className="text-primary hover:underline">
+                    {classes.latest.title}
+                  </button>{" "}
+                  ({classes.latest.course}, {relative(classes.latest.postedAt ?? now, now)}).
+                </>
+              )}
+            </p>
+          ) : (
+            <div>
+              {classes.week.slice(0, 5).map((x) => {
+                const read = p.readIds.has(x.id);
+                const summary = summarize(x.excerpt);
+                return (
+                  <article key={x.id} className={cn("brief-class", read && "is-read")}>
+                    <p className="brief-class__meta">
+                      <span className="brief-tag brief-tag--secondary">{x.course || x.source}</span>
+                      <span>{x.postedAt ? relative(x.postedAt, now) : ""}</span>
+                      {!read && <span className="dday dday--soon brief-class__new">NEW</span>}
+                    </p>
+                    <h3 className="brief-item__title">
+                      <button onClick={() => p.onOpenPost(x)} className="text-left">
+                        {x.title}
+                      </button>
+                    </h3>
+                    {summary && <p className="brief-class__summary">{summary}</p>}
+                  </article>
+                );
+              })}
+              {classes.week.length > 5 && <p className="mx-1 mt-1 text-sm font-bold text-muted-foreground">and {plural(classes.week.length - 5, "more")} this week</p>}
+            </div>
+          )}
         </section>
       )}
 

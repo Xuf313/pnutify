@@ -26,6 +26,8 @@ test.describe('Briefing', () => {
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
+    // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.
+    await expect(brief.locator('section[aria-labelledby="brief-classes"]')).toHaveCount(0);
     await noSidewaysScroll(page);
   });
 });

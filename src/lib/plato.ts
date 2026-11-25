@@ -181,7 +181,7 @@ export async function fetchPlato(token: string, now = Date.now()): Promise<Plato
         author: d.userfullname ?? '',
         postedAt: (d.created || d.timemodified || 0) * 1000,
         url: `${PLATO_BASE}/mod/forum/discuss.php?d=${d.discussion || d.id}`,
-        excerpt: text(d.message ?? '').slice(0, 160),
+        excerpt: text(d.message ?? '').slice(0, 320),
       }))
       .filter((a) => a.title && a.postedAt > now - 21 * DAY)
       .sort((a, b) => b.postedAt - a.postedAt)
