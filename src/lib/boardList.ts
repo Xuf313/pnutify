@@ -31,5 +31,13 @@ export const CORE_BOARDS: BoardDef[] = [
 export const BOARD_DEFS: BoardDef[] = [...CORE_BOARDS, ...DEPARTMENT_BOARDS.filter((d) => !CORE_BOARDS.some((c) => c.id === d.id))];
 export const BOARD_IDS = BOARD_DEFS.map((b) => b.id);
 export const CORE_BOARD_IDS = CORE_BOARDS.map((b) => b.id);
+/**
+ * What a new device shows: International only. Every student picks their own
+ * department; CSE is a department like any other (it just stays on the
+ * every-minute check on the server).
+ */
+export const DEFAULT_BOARD_IDS = ['international'];
+/** Whether these boards include a department (anything but the university-wide International board). */
+export const hasDepartment = (ids: string[]) => ids.some((id) => id !== 'international');
 export const boardDef = (id: string) => BOARD_DEFS.find((b) => b.id === id);
 export const isKnownBoard = (id: unknown): id is string => typeof id === 'string' && BOARD_DEFS.some((b) => b.id === id);

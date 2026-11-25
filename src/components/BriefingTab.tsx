@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowRight, BellRing, Check, ExternalLink, Plus, Smartphone, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, Check, ExternalLink, Landmark, Plus, Smartphone, TriangleAlert } from "lucide-react";
 import { cn, DdaySticker } from "./ui";
 import { addDays, formatDate, formatDue, fromKst, greeting, kstDay, kstHour, relative } from "@/lib/client/time";
 import { isIOS, isStandalone, pushSupport } from "@/lib/client/push";
@@ -12,6 +12,8 @@ import type { AlertCategories, CoursePost, Notice, OwnerData, Tab, Task } from "
 import { boardInfo, SOURCE_LABEL } from "@/lib/client/types";
 import { BoardIcon } from "./BoardIcon";
 import { isFreshNotice } from "@/lib/client/notices";
+import { hasDepartment } from "@/lib/boardList";
+import { classDigest, classSentence, summarize } from "@/lib/client/classSummary";
 
 const DAY = 86_400_000;
 
@@ -19,6 +21,8 @@ type Props = {
   now: number;
   sinceTs: number;
   notices: Notice[];
+  /** Boards this device shows. */
+  boards: string[];
   readIds: Set<string>;
   tasks: Task[];
   /** Owner mode only: PLATO announcements and NESPA notices, newest first. */
@@ -62,19 +66,30 @@ type Update = {
 type Part = { text: string; go?: () => void };
 
 /** "a", "a and b", "a, b and c" */
-function joinParts(parts: Part[]): ReactNode {
-  return parts.map((part, i) => (
-    <Fragment key={part.text}>
-      {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
-      {part.go ? (
-        <button type="button" onClick={part.go}>
-          {part.text}
-        </button>
-      ) : (
-        part.text
-      )}
-    </Fragment>
-  ));
+/** "2 tasks overdue, 1 deadline today and 3 new notices", then `end`, which stays on the last part's line. */
+function joinParts(parts: Part[], end = ""): ReactNode {
+  return parts.map((part, i) => {
+    const label = part.go ? (
+      <button type="button" onClick={part.go}>
+        {part.text}
+      </button>
+    ) : (
+      part.text
+    );
+    return (
+      <Fragment key={part.text}>
+        {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
+        {i === parts.length - 1 && end ? (
+          <span className="whitespace-nowrap">
+            {label}
+            {end}
+          </span>
+        ) : (
+          label
+        )}
+      </Fragment>
+    );
+  });
 }
 
 /** The one thing most worth doing next. */
@@ -99,14 +114,19 @@ export function BriefingTab(p: Props) {
     [p.posts, p.readIds, now],
   );
 
+  // ---------- class announcements (owner: PLATO course news and NESPA notices) ----------
+  const hasClasses = Boolean(p.ownerData && (p.ownerData.plato.configured || p.ownerData.nespa.configured));
+  const classes = useMemo(() => classDigest(p.posts, now), [p.posts, now]);
+
   // ---------- the blurb under the painting ----------
   const parts: Part[] = [];
   const toTasks = () => p.goTo("tasks");
   if (overdue.length) parts.push({ text: `${plural(overdue.length, "task")} overdue`, go: toTasks });
   if (dueToday.length) parts.push({ text: `${plural(dueToday.length, "deadline")} today`, go: toTasks });
   if (freshNotices.length) parts.push({ text: plural(freshNotices.length, "new notice"), go: () => p.goTo("notices") });
-  if (newPosts.length) parts.push({ text: plural(newPosts.length, "new course post") });
-  const blurb: ReactNode =
+  // With PLATO/NESPA set up, class posts get a sentence of their own below instead.
+  if (newPosts.length && !hasClasses) parts.push({ text: plural(newPosts.length, "new course post") });
+  const dayLine: ReactNode =
     parts.length === 0 ? (
       thisWeek.length ? (
         `Nothing due today, and ${plural(thisWeek.length, "deadline")} later this week. A good day to get ahead.`
@@ -115,9 +135,17 @@ export function BriefingTab(p: Props) {
       )
     ) : (
       <>
-        {greeting(now)}. You have {joinParts(parts)}.
+        {greeting(now)}. You have {joinParts(parts, ".")}
       </>
     );
+  // Classes always get a line of their own, even in a quiet week.
+  const blurb: ReactNode = hasClasses ? (
+    <>
+      {dayLine} {classSentence(classes)}
+    </>
+  ) : (
+    dayLine
+  );
 
   // ---------- "Push your work forward" ----------
   const openTask = (t: Task) => () => (t.url ? window.open(t.url, "_blank", "noopener,noreferrer") : p.goTo("tasks"));
@@ -151,16 +179,6 @@ export function BriefingTab(p: Props) {
 
   // ---------- "New updates" ----------
   const updates: Update[] = useMemo(() => {
-    const fromPosts: Update[] = newPosts.map((x) => ({
-      id: x.id,
-      title: x.title,
-      tag: x.source === "PLATO" ? x.course || "PLATO" : "NESPA",
-      tone: x.source === "PLATO" ? "primary" : "muted",
-      text: x.excerpt || `${x.source}${x.course && x.course !== x.source ? ` · ${x.course}` : ""}`,
-      at: x.postedAt ?? 0,
-      url: x.url,
-      open: () => p.onOpenPost(x),
-    }));
     const fromNotices: Update[] = freshNotices.map((n) => ({
       id: n.id,
       title: n.title,
@@ -172,9 +190,9 @@ export function BriefingTab(p: Props) {
       source: n.source,
       open: () => p.onOpenNotice(n.id),
     }));
-    return [...fromPosts, ...fromNotices].sort((a, b) => b.at - a.at).slice(0, 7);
+    return fromNotices.sort((a, b) => b.at - a.at).slice(0, 7);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newPosts, freshNotices]);
+  }, [freshNotices]);
 
   // ---------- "Your day": today's deadlines by time ----------
   const todayAll = [...dueToday, ...doneToday.filter((t) => t.dueDate >= now - 12 * 3600_000)].sort((a, b) => a.dueDate - b.dueDate);
@@ -208,12 +226,20 @@ export function BriefingTab(p: Props) {
   const sources = [
     p.ownerData?.plato.configured && "PLATO",
     p.ownerData?.nespa.configured && "NESPA",
-    "CSE",
-    "International",
+    ...p.boards.map((b) => SOURCE_LABEL[b] ?? b),
   ].filter(Boolean) as string[];
+  // New devices start with International only: ask for the student's department.
+  const needsDepartment = !hasDepartment(p.boards);
 
   return (
     <div className="brief pb-4">
+      {/*
+        Wide screens: a front page in two columns, the clipping and the week on
+        the left, what to do and what's new on the right. Narrow screens: one
+        column in the order set in globals.css (the columns don't exist there).
+      */}
+      <div className="brief-front">
+      <div className="brief-lead">
       {/* A newspaper clipping taped into the notebook: nameplate, the lead line, then the painting of the day */}
       <header className="brief-clip">
         <span className="tape tape--l" aria-hidden />
@@ -244,11 +270,75 @@ export function BriefingTab(p: Props) {
       </header>
 
       {problems.map((msg) => (
-        <p key={msg} className="mt-4 text-xs font-bold text-danger flex items-start gap-1.5">
+        <p key={msg} className="brief-problem mt-4 text-xs font-bold text-danger flex items-start gap-1.5">
           <TriangleAlert size={14} className="shrink-0 mt-px" /> {msg}
         </p>
       ))}
 
+      {/* ---------- your day ---------- */}
+      {dayParts.length > 0 && (
+        <section className="brief-section brief-dayparts">
+          <h2 className="brief-h2">Your day</h2>
+          <div className="brief-day-card">
+            {dayParts.map((part) => (
+              <div key={part.label}>
+                <p className="brief-part">{part.label}</p>
+                {part.items.map((t) => (
+                  <div key={t.id} className="brief-slot">
+                    <span className="brief-slot__time">{formatDate(t.dueDate, { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                    <span className={cn("brief-slot__event", t.status === "completed" && "line-through opacity-55")}>
+                      {t.title}
+                      <small>{[sourceName(t), t.course !== "General" && t.course !== "NESPA" ? t.course : null, "deadline"].filter(Boolean).join(" · ")}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ---------- looking ahead ---------- */}
+      <section className="brief-section brief-ahead">
+        <h2 className="brief-h2">Looking ahead</h2>
+        <div className="cozy-card bg-card p-3 grid grid-cols-7 gap-1 text-center">
+          {week.map((w, i) => (
+            <button
+              key={w.day}
+              onClick={() => p.openCalendarDay(w.day)}
+              className={cn("flex flex-col items-center gap-1 py-1.5 rounded-lg transition-transform duration-150 active:scale-95", i === 0 && "bg-muted")}
+              aria-label={`${w.label}, ${formatDate(fromKst(w.day, "12:00"), { month: "long", day: "numeric" })}: ${plural(w.count, "deadline")}`}
+            >
+              <span className="text-xs font-bold text-muted-foreground">{w.label}</span>
+              <span className="text-sm font-extrabold tabular-nums text-foreground">{w.date}</span>
+              <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
+                <span
+                  className={cn("absolute bottom-0 inset-x-0 rounded-full", w.count ? "bg-primary" : "")}
+                  style={{ height: `${(w.count / maxCount) * 100}%` }}
+                />
+              </span>
+              <span className={cn("text-xs font-extrabold tabular-nums", w.count ? "text-foreground" : "text-muted-foreground")} aria-hidden>
+                {w.count || "–"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      </div>
+
+      <div className="brief-rail">
+      {needsDepartment && (
+        <section className="brief-section brief-dept" aria-label="Add your department">
+          <SetupCard
+            icon={<Landmark size={20} />}
+            title="Add your department"
+            body="PNUtify shows International notices to everyone. Add your department's board (정보컴퓨터공학부, 경영학과, 수학과, …) to get its notices here and alerts for them."
+            cta="Choose my department"
+            onClick={() => p.openSettings("boards")}
+          />
+        </section>
+      )}
       {/* ---------- push your work forward ---------- */}
       {push && (
         <section className="brief-push" aria-label={push.label}>
@@ -263,6 +353,63 @@ export function BriefingTab(p: Props) {
               <br />→
             </span>
           </button>
+        </section>
+      )}
+
+      {/* ---------- from your classes: always there, even in a quiet week ---------- */}
+      {hasClasses && (
+        <section className="brief-section brief-classes" aria-labelledby="brief-classes">
+          <h2 id="brief-classes" className="brief-h2">
+            From your classes
+            <small>{classes.week.length > 0 ? `${plural(classes.week.length, "announcement")} this week` : "nothing new this week"}</small>
+          </h2>
+          {classes.byCourse.length > 1 && (
+            <p className="brief-class__digest">
+              {classes.byCourse.map(([course, n]) => (
+                <span key={course} className="brief-tag brief-tag--secondary">
+                  {course} {n}
+                </span>
+              ))}
+            </p>
+          )}
+          {classes.week.length === 0 ? (
+            <p className="mx-1 text-sm font-bold text-muted-foreground">
+              No new announcements from your classes this week.
+              {classes.latest && (
+                <>
+                  {" "}
+                  The last one:{" "}
+                  <button onClick={() => p.onOpenPost(classes.latest!)} className="text-primary hover:underline">
+                    {classes.latest.title}
+                  </button>{" "}
+                  ({classes.latest.course}, {relative(classes.latest.postedAt ?? now, now)}).
+                </>
+              )}
+            </p>
+          ) : (
+            <div>
+              {classes.week.slice(0, 5).map((x) => {
+                const read = p.readIds.has(x.id);
+                const summary = summarize(x.excerpt);
+                return (
+                  <article key={x.id} className={cn("brief-class", read && "is-read")}>
+                    <p className="brief-class__meta">
+                      <span className="brief-tag brief-tag--secondary">{x.course || x.source}</span>
+                      <span>{x.postedAt ? relative(x.postedAt, now) : ""}</span>
+                      {!read && <span className="dday dday--soon brief-class__new">NEW</span>}
+                    </p>
+                    <h3 className="brief-item__title">
+                      <button onClick={() => p.onOpenPost(x)} className="text-left">
+                        {x.title}
+                      </button>
+                    </h3>
+                    {summary && <p className="brief-class__summary">{summary}</p>}
+                  </article>
+                );
+              })}
+              {classes.week.length > 5 && <p className="mx-1 mt-1 text-sm font-bold text-muted-foreground">and {plural(classes.week.length - 5, "more")} this week</p>}
+            </div>
+          )}
         </section>
       )}
 
@@ -359,59 +506,12 @@ export function BriefingTab(p: Props) {
 
       </div>
 
-      {/* ---------- your day ---------- */}
-      {dayParts.length > 0 && (
-        <section className="brief-section">
-          <h2 className="brief-h2">Your day</h2>
-          <div className="brief-day-card">
-            {dayParts.map((part) => (
-              <div key={part.label}>
-                <p className="brief-part">{part.label}</p>
-                {part.items.map((t) => (
-                  <div key={t.id} className="brief-slot">
-                    <span className="brief-slot__time">{formatDate(t.dueDate, { hour: "numeric", minute: "2-digit", hour12: true })}</span>
-                    <span className={cn("brief-slot__event", t.status === "completed" && "line-through opacity-55")}>
-                      {t.title}
-                      <small>{[sourceName(t), t.course !== "General" && t.course !== "NESPA" ? t.course : null, "deadline"].filter(Boolean).join(" · ")}</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ---------- looking ahead ---------- */}
-      <section className="brief-section">
-        <h2 className="brief-h2">Looking ahead</h2>
-        <div className="cozy-card bg-card p-3 grid grid-cols-7 gap-1 text-center">
-          {week.map((w, i) => (
-            <button
-              key={w.day}
-              onClick={() => p.openCalendarDay(w.day)}
-              className={cn("flex flex-col items-center gap-1 py-1.5 rounded-lg transition-transform duration-150 active:scale-95", i === 0 && "bg-muted")}
-              aria-label={`${w.label}, ${formatDate(fromKst(w.day, "12:00"), { month: "long", day: "numeric" })}: ${plural(w.count, "deadline")}`}
-            >
-              <span className="text-xs font-bold text-muted-foreground">{w.label}</span>
-              <span className="text-sm font-extrabold tabular-nums text-foreground">{w.date}</span>
-              <span className="h-8 w-3 rounded-full bg-muted relative overflow-hidden" aria-hidden>
-                <span
-                  className={cn("absolute bottom-0 inset-x-0 rounded-full", w.count ? "bg-primary" : "")}
-                  style={{ height: `${(w.count / maxCount) * 100}%` }}
-                />
-              </span>
-              <span className={cn("text-xs font-extrabold tabular-nums", w.count ? "text-foreground" : "text-muted-foreground")} aria-hidden>
-                {w.count || "–"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+      </div>
+      </div>
 
       {/* ---------- get set up ---------- */}
       {(alertsOff || showInstall) && (
-        <section className="brief-section grid gap-3 sm:grid-cols-2">
+        <section className="brief-section brief-setup grid gap-3 sm:grid-cols-2">
           {alertsOff && (
             <SetupCard
               icon={<BellRing size={20} />}
@@ -439,10 +539,14 @@ export function BriefingTab(p: Props) {
           Made for you by <em>PNUtify</em> using <em>your</em>{" "}
           {sources.map((s, i) => (
             <span key={s}>
-              <span className="brief-footer__src" style={{ ["--tilt" as string]: `${(i % 2 ? 1 : -1) * 0.8}deg` }}>
-                {s}
+              {/* The name and its comma or full stop stay on one line. */}
+              <span className="whitespace-nowrap">
+                <span className="brief-footer__src" style={{ ["--tilt" as string]: `${(i % 2 ? 1 : -1) * 0.8}deg` }}>
+                  {s}
+                </span>
+                {i < sources.length - 2 ? "," : i === sources.length - 2 ? "" : "."}
               </span>
-              {i < sources.length - 2 ? ", " : i === sources.length - 2 ? " and " : "."}
+              {i < sources.length - 2 ? " " : i === sources.length - 2 ? " and " : ""}
             </span>
           ))}
         </p>

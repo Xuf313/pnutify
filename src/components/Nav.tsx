@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ComponentType } from "react";
+import { useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "./ui";
 import type { Tab } from "@/lib/client/types";
 
@@ -63,6 +63,65 @@ export function Nav({ items, active, onSelect, badge, variant, instant }: Props)
     return () => ro.disconnect();
   }, [index]);
 
+  // ---------- the phone bar: press and slide your finger along it, like iOS tab bars ----------
+  // While you hold, the bar grows a little and the pill follows your finger; let go and it
+  // snaps to the nearest tab and opens it. A plain tap still works as before.
+  const [drag, setDrag] = useState<{ x: number } | null>(null);
+  const [held, setHeld] = useState(false);
+  const press = useRef<{ id: number; startX: number; dragging: boolean } | null>(null);
+  const swallowClick = useRef(false);
+  const pillX = (clientX: number) => {
+    const box = wrap.current;
+    const first = buttons.current[0];
+    const last = buttons.current[items.length - 1];
+    if (!box || !first || !last || !pos) return null;
+    const x = clientX - box.getBoundingClientRect().left - pos.w / 2;
+    return Math.min(Math.max(x, first.offsetLeft), last.offsetLeft);
+  };
+  const nearest = (x: number) => {
+    let best = 0;
+    buttons.current.forEach((b, i) => {
+      if (b && Math.abs(b.offsetLeft - x) < Math.abs((buttons.current[best]?.offsetLeft ?? 0) - x)) best = i;
+    });
+    return best;
+  };
+  const drags = variant === "bar";
+  const onPointerDown = (e: ReactPointerEvent) => {
+    if (!drags || (e.pointerType === "mouse" && e.button !== 0)) return;
+    press.current = { id: e.pointerId, startX: e.clientX, dragging: false };
+    setHeld(true);
+  };
+  const onPointerMove = (e: ReactPointerEvent) => {
+    const p = press.current;
+    if (!p || p.id !== e.pointerId) return;
+    if (!p.dragging && Math.abs(e.clientX - p.startX) < 6) return;
+    if (!p.dragging) {
+      p.dragging = true;
+      wrap.current?.setPointerCapture(e.pointerId);
+    }
+    const x = pillX(e.clientX);
+    if (x !== null) setDrag({ x });
+  };
+  const onPointerEnd = (e: ReactPointerEvent) => {
+    const p = press.current;
+    if (!p || p.id !== e.pointerId) return;
+    press.current = null;
+    setHeld(false);
+    if (p.dragging && drag && e.type === "pointerup") {
+      // The button under the finger would get a click too; the slide already chose.
+      swallowClick.current = true;
+      setTimeout(() => (swallowClick.current = false), 0);
+      onSelect(items[nearest(drag.x)].id);
+    }
+    setDrag(null);
+  };
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (swallowClick.current) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
+
   // The first placement (and keyboard shortcuts) jump instead of sliding.
   const jump = instant || measured <= 1;
   const lift = variant === "bar" ? { x: -1, y: -1 } : { x: 0, y: -2 };
@@ -98,11 +157,24 @@ export function Nav({ items, active, onSelect, badge, variant, instant }: Props)
     </>
   );
 
-  const move = pos ? { transform: `translate(${pos.x + lift.x}px, ${pos.y + lift.y}px)` } : undefined;
-  const clip = pos ? `inset(${pos.y + lift.y}px ${pos.W - pos.x - pos.w - lift.x}px ${pos.H - pos.y - pos.h - lift.y}px ${pos.x + lift.x}px round ${s.radius}px)` : "inset(0 100% 100% 0)";
+  // Where the pill is: under your finger while sliding, otherwise on the active tab.
+  const x = drag?.x ?? pos?.x ?? 0;
+  const move = pos ? { transform: `translate(${x + lift.x}px, ${pos.y + lift.y}px)` } : undefined;
+  const clip = pos ? `inset(${pos.y + lift.y}px ${pos.W - x - pos.w - lift.x}px ${pos.H - pos.y - pos.h - lift.y}px ${x + lift.x}px round ${s.radius}px)` : "inset(0 100% 100% 0)";
 
   return (
-    <div ref={wrap} className="nav-wrap relative" data-instant={jump ? "" : undefined}>
+    <div
+      ref={wrap}
+      className={cn("nav-wrap relative", drags && "nav-wrap--slide")}
+      data-instant={jump ? "" : undefined}
+      data-held={held ? "" : undefined}
+      data-dragging={drag ? "" : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onClickCapture={onClickCapture}
+    >
       {/* plain tabs: these are the real buttons */}
       <div className={s.list}>
         {items.map(({ id, label: l, icon }, i) => (

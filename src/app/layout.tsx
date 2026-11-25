@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 const description =
-  "Every CSE and International notice in one place, deadline reminders and a daily briefing — made by a PNU student for PNU students. No PLATO password needed.";
+  "Your department's notices and International notices in one place, deadline reminders and a daily briefing — made by a PNU student for PNU students. No PLATO password needed.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://www.pnutify.app"),
   title: { default: "PNUtify", template: "%s · PNUtify" },
   description,
   applicationName: "PNUtify",
-  keywords: ["Pusan National University", "PNU", "부산대", "CSE notices", "international students", "deadlines"],
+  keywords: ["Pusan National University", "PNU", "부산대", "department notices", "international students", "deadlines"],
   appleWebApp: { capable: true, title: "PNUtify", statusBarStyle: "default" },
   formatDetection: { telephone: false },
   openGraph: {

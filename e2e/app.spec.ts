@@ -26,6 +26,8 @@ test.describe('Briefing', () => {
     for (const h of ['To-dos', 'New updates', 'Looking ahead']) await expect(brief.getByRole('heading', { name: h })).toBeVisible();
     await expect(brief.locator('.brief-item')).toHaveCount(3); // the three fresh notices, newest first
     await expect(brief.locator('.brief-item__num').first()).toHaveText('01');
+    // Class announcements are the owner's (PLATO/NESPA); visitors don't get the section.
+    await expect(brief.locator('section[aria-labelledby="brief-classes"]')).toHaveCount(0);
     await noSidewaysScroll(page);
 
     // The count in the summary line goes to Notices.
@@ -255,5 +257,67 @@ test.describe('PLATO calendar link', () => {
     await page.goto('/');
     await visible(page, 'button[aria-label="Settings"], button:has-text("Settings & alerts")').first().click();
     await expect(page.getByRole('dialog').getByText('PLATO deadlines', { exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe('A new device', () => {
+  test('starts with International only and asks for the department', async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await mockApis(page, { newDevice: true });
+    await page.addInitScript(() => localStorage.removeItem('boards_v1'));
+    await page.goto('/');
+    const brief = visible(page, '.brief');
+    await expect(brief.getByText('Add your department', { exact: true })).toBeVisible();
+    // The credit line names what this device actually shows.
+    await expect(brief.locator('.brief-footer__credit')).not.toContainText('CSE');
+
+    await brief.getByRole('button', { name: 'Choose my department' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('#settings-boards')).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Remove International' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove CSE' })).toHaveCount(0);
+    await dialog.getByLabel('Search departments').fill('정보컴퓨터');
+    await dialog.getByRole('button', { name: 'Add CSE' }).click();
+    await page.keyboard.press('Escape');
+    await expect(brief.getByText('Add your department', { exact: true })).toHaveCount(0);
+  });
+
+  test('a device that used PNUtify before keeps CSE', async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await mockApis(page, { newDevice: true });
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.removeItem('boards_v1');
+        localStorage.setItem('read_seed_v1', JSON.stringify('done'));
+        sessionStorage.setItem('seeded', '1');
+      }
+    });
+    await page.goto('/?tab=notices');
+    await expect(visible(page, 'main').getByRole('tab', { name: /CSE/ })).toBeVisible();
+  });
+});
+
+test.describe('Phone tab bar', () => {
+  test('slide a finger along it to pick a tab', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone');
+    await page.goto('/');
+    const bar = page.locator('nav[aria-label="Sections"] >> visible=true').first();
+    const tab = (name: string) => bar.getByRole('button', { name, exact: true });
+    const from = await tab('Briefing').boundingBox();
+    const to = await tab('Tasks').boundingBox();
+    if (!from || !to) throw new Error('no tabs');
+    const y = from.y + from.height / 2;
+    await page.mouse.move(from.x + from.width / 2, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(from.x + from.width / 2 + ((to.x - from.x) * i) / 10, y);
+    // While held, nothing has switched yet.
+    await expect(tab('Briefing')).toHaveAttribute('aria-current', 'page');
+    await page.mouse.up();
+    await expect(tab('Tasks')).toHaveAttribute('aria-current', 'page');
+    await expect(visible(page, 'main').getByRole('heading', { name: 'Tasks' })).toBeVisible();
+
+    // A plain tap still works.
+    await tab('Notices').click();
+    await expect(tab('Notices')).toHaveAttribute('aria-current', 'page');
   });
 });

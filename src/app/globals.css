@@ -468,7 +468,7 @@ body {
 
 /* Desktop: two columns, with a column rule */
 @media (min-width: 1024px) {
-  .brief { max-width: 54rem; }
+  .brief { max-width: 78rem; }
   .brief-clip { max-width: 40rem; margin-left: auto; margin-right: auto; }
   .brief-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
   .brief-cols > :last-child { position: relative; }
@@ -504,6 +504,21 @@ body {
 .nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-pill { translate: 2px 2px; box-shadow: 0 0 0 var(--color-border); }
 .nav-wrap:has(.nav-tab[aria-current="page"]:active) .nav-active > * { translate: 2px 2px; }
 
+/* The phone bar: press and slide along it (see Nav.tsx). The bar grows a little while held,
+   the pill follows the finger with no lag, and springs onto the tab when you let go. */
+.nav-wrap--slide { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: transform 220ms cubic-bezier(0.34, 1.5, 0.5, 1); }
+.nav-wrap--slide[data-held] { transform: scale(1.035); }
+.nav-wrap--slide .nav-pill { transition: transform 420ms cubic-bezier(0.3, 1.35, 0.45, 1), scale 220ms cubic-bezier(0.34, 1.5, 0.5, 1), translate 100ms var(--ease-out), box-shadow 100ms var(--ease-out); }
+.nav-wrap--slide .nav-active { transition: clip-path 420ms cubic-bezier(0.3, 1.35, 0.45, 1); }
+.nav-wrap--slide[data-held] .nav-pill { scale: 1.04 1.1; }
+.nav-wrap--slide[data-dragging] .nav-pill { transition: scale 220ms cubic-bezier(0.34, 1.5, 0.5, 1); }
+.nav-wrap--slide[data-dragging] .nav-active { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-wrap--slide, .nav-wrap--slide .nav-pill { transition: none; }
+  .nav-wrap--slide[data-held] { transform: none; }
+  .nav-wrap--slide[data-held] .nav-pill { scale: none; }
+}
+
 /* A tab's content settles in when you switch to it. */
 .tab-enter { animation: tab-enter 200ms var(--ease-out); }
 @keyframes tab-enter { from { opacity: 0; transform: translateY(6px); } }
@@ -523,6 +538,62 @@ body {
   .brief-clip .brief-frame__canvas { aspect-ratio: 16 / 9; }
 }
 
+/* "From your classes": announcements with a one-line summary */
+.brief-class__digest { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: -0.3rem 0.25rem 0.4rem; }
+.brief-class__digest .brief-tag { margin-left: 0; }
+.brief-class { padding: 0.85rem 0.25rem; }
+.brief-class + .brief-class { border-top: 1.5px dashed color-mix(in srgb, var(--color-border) 22%, transparent); }
+.brief-class__meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 700; color: var(--color-muted-foreground); margin-bottom: 0.3rem; }
+.brief-class__meta .brief-tag { margin-left: 0; }
+.brief-class__new { min-width: 0; font-size: 0.65rem; padding: 0.02rem 0.35rem; box-shadow: 1.5px 1.5px 0 var(--color-border); }
+.brief-class__summary { font-size: 0.92rem; font-weight: 600; line-height: 1.5; color: var(--color-muted-foreground); margin-top: 0.25rem; text-wrap: pretty; }
+.brief-class.is-read .brief-item__title { font-weight: 700; color: var(--color-muted-foreground); }
+
 /* A task's check pops in when it's ticked off */
 .check-pop { animation: check-pop 0.28s var(--ease-out); }
 @keyframes check-pop { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ══════════════════════════════════════════════════════════════
+   The Briefing's front page on wide screens
+   ══════════════════════════════════════════════════════════════
+   The columns follow the room the Briefing has (not the window), so the
+   sidebar and narrow windows are taken into account. */
+.brief { container-type: inline-size; display: flex; flex-direction: column; }
+
+/* One column: the wrappers step aside and the blocks keep the phone order. */
+.brief-front, .brief-lead, .brief-rail { display: contents; }
+@container (max-width: 55.99rem) {
+  .brief-clip { order: 1; }
+  .brief-problem { order: 2; }
+  .brief-dept { order: 3; }
+  .brief-push { order: 3; }
+  .brief-classes { order: 4; }
+  .brief-cols { order: 5; }
+  .brief-dayparts { order: 6; }
+  .brief-ahead { order: 7; }
+  .brief-setup { order: 8; }
+  .brief-footer { order: 9; }
+}
+
+/* Two columns, from about 900px of room. */
+@container (min-width: 56rem) {
+  .brief-front {
+    display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); column-gap: 3rem; align-items: start;
+  }
+  .brief-lead, .brief-rail { display: block; min-width: 0; }
+  .brief-lead .brief-clip { max-width: none; margin-left: 0; margin-right: 0; }
+  /* The right column starts level with the clipping. */
+  .brief-rail > :first-child { margin-top: 0.9rem; }
+  .brief-rail > .brief-section:first-child { padding-top: 0; border-top: 0; }
+  /* To-dos and new updates stack inside the right column. */
+  .brief-rail .brief-cols { display: block; }
+  .brief-rail .brief-cols > :last-child::before { display: none; }
+  .brief-lead .brief-ahead, .brief-lead .brief-dayparts { margin-top: 2.2rem; }
+  /* Size the nameplate to its column, not the window. */
+  .brief-lead .brief-day { font-size: clamp(2.2rem, 4.6cqi, 3.6rem); }
+}
+
+/* Very wide: a little more air between the columns. */
+@container (min-width: 72rem) {
+  .brief-front { column-gap: 4rem; }
+}
